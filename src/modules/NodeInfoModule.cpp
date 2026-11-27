@@ -1,4 +1,5 @@
 #include "NodeInfoModule.h"
+#include "AdminKeys.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -23,6 +24,7 @@ static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPL
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
     suppressReplyForCurrentRequest = false;
+    adminRequestForCurrentRequest = false;
 
     if (mp.from == nodeDB->getNodeNum()) {
         LOG_WARN("Ignoring packet supposed to be from our own node: 0x%08x", mp.from);
@@ -34,11 +36,16 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
+        // Only a verified signature proves `from`, and it verified against the key NodeDB now holds for it.
+        meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
+        adminRequestForCurrentRequest =
+            mp.xeddsa_signed && nodeDB->copyPublicKeyAuthoritative(sender, senderKey) && AdminKeys::isAuthorized(senderKey.bytes);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC jumps and replayed
         // packets' stale rx_time perturbing it. Seconds, not millis - this is a wide window.
         const uint32_t nowSecs = Time::getUptimeSecs();
         auto it = lastNodeInfoSeen.find(sender);
-        if (it != lastNodeInfoSeen.end() && (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {
+        if (!adminRequestForCurrentRequest && it != lastNodeInfoSeen.end() &&
+            (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {
             suppressReplyForCurrentRequest = true;
         }
         lastNodeInfoSeen[sender] = nowSecs;
@@ -96,6 +103,7 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     meshtastic_MeshPacket *p = allocReply();
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
     deferHistoryStamp = false;
+    shorterTimeout = false; // consumed by allocReply(); a refused send must not leave the next request on the interactive gate
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
@@ -116,7 +124,6 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         prevPacketId = p->id;
 
         const ErrorCode res = service->sendToMesh(p);
-        shorterTimeout = false;
         // A rejected send never reached the air, so it neither defers the routine broadcast nor
         // consumes a pending channel change. sendToMesh() has already released the packet.
         if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
@@ -173,11 +180,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             timeoutMs = hamMs;
     }
     uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
-    if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
+    const bool interactive = shorterTimeout || (adminRequestForCurrentRequest && isReplyingToExternalRequest);
+    if (!interactive && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
+    } else if (interactive && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
         // For interactive/urgent requests (e.g., user-triggered or implicit requests), use a shorter 60s timeout
         LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
         ignoreRequest = true;

@@ -45,6 +45,7 @@
 // release-only stub because these tests need to inspect the captured message text, not just avoid leaks.
 static std::vector<std::string> capturedWarnings;
 static std::vector<meshtastic_ClientNotification_NotificationType> capturedTypes; // parallel to capturedWarnings
+static int ownerAnnouncements;
 
 class MockMeshService : public MeshService
 {
@@ -55,6 +56,7 @@ class MockMeshService : public MeshService
         capturedTypes.push_back(n->type);
         releaseClientNotificationToPool(n);
     }
+    void announceOwnerChange() override { ownerAnnouncements++; }
 };
 
 static MockMeshService *mockMeshService;
@@ -2386,6 +2388,86 @@ static void test_notificationType_clampConfigLora_channelNumOutOfRange()
 }
 
 // -----------------------------------------------------------------------
+// Owner change announcement
+// -----------------------------------------------------------------------
+//
+// An admin set_owner must put the new name on the air through MeshService::announceOwnerChange(),
+// which sends on NodeInfo's 60 s interactive throttle. The routine path it replaced
+// (reloadOwner(true) -> sendOurNodeInfo()) sat behind the 30 min floor, and the reboot set_owner
+// schedules inherits that floor from the persisted transmit history, so a rename made within the
+// window never reached the mesh - not even the admin node that made it. Inside an edit transaction
+// the announcement waits for the save at commit; the old code skipped it there entirely.
+
+extern uint32_t rebootAtMsec;
+
+static void sendSetOwnerName(const char *longName)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    strncpy(m.set_owner.long_name, longName, sizeof(m.set_owner.long_name) - 1);
+    sendAdmin(m);
+    testAdmin->drainReply();
+}
+
+static void primeOwnerAnnounceTest()
+{
+    owner = meshtastic_User_init_zero;
+    strncpy(owner.long_name, "Old Name", sizeof(owner.long_name) - 1);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
+}
+
+static void test_setOwner_announcesOnSave()
+{
+    primeOwnerAnnounceTest();
+    const uint32_t savedRebootAt = rebootAtMsec;
+
+    sendSetOwnerName("New Name");
+    rebootAtMsec = savedRebootAt; // set_owner schedules a reboot; don't leak it into later tests
+
+    TEST_ASSERT_EQUAL_STRING("New Name", owner.long_name);
+    TEST_ASSERT_EQUAL_INT(1, ownerAnnouncements);
+}
+
+static void test_setOwner_unchangedNameDoesNotAnnounce()
+{
+    primeOwnerAnnounceTest();
+
+    sendSetOwnerName("Old Name");
+
+    TEST_ASSERT_EQUAL_INT(0, ownerAnnouncements);
+}
+
+static void test_setOwner_inTransaction_announcesOnceAtCommit()
+{
+    primeOwnerAnnounceTest();
+    sendBeginEdit();
+
+    sendSetOwnerName("New Name");
+    sendSetOwnerName("Newer Name");
+    TEST_ASSERT_EQUAL_INT(0, ownerAnnouncements);
+
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_STRING("Newer Name", owner.long_name);
+    TEST_ASSERT_EQUAL_INT(1, ownerAnnouncements);
+}
+
+// An abandoned transaction still commits what it applied, so the owner change still goes out.
+static void test_setOwner_abandonedTransaction_announcesOnRetire()
+{
+    primeOwnerAnnounceTest();
+    sendBeginEdit();
+    sendSetOwnerName("New Name");
+    TEST_ASSERT_EQUAL_INT(0, ownerAnnouncements);
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, ownerAnnouncements);
+}
+
+// -----------------------------------------------------------------------
 // Node-DB admin metadata: favorite / ignore / mute
 // -----------------------------------------------------------------------
 //
@@ -2613,6 +2695,7 @@ void setUp(void)
     testAdmin = new AdminModuleTestShim();
     capturedWarnings.clear();
     capturedTypes.clear();
+    ownerAnnouncements = 0;
     // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
     replaceAdminRadioGlobals();
 }
@@ -2788,6 +2871,10 @@ void setup()
     RUN_TEST(test_presetForRegionSelection_firstNonUsSelectionKeepsCurrentPreset);
     RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
     RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
+    RUN_TEST(test_setOwner_announcesOnSave);
+    RUN_TEST(test_setOwner_unchangedNameDoesNotAnnounce);
+    RUN_TEST(test_setOwner_inTransaction_announcesOnceAtCommit);
+    RUN_TEST(test_setOwner_abandonedTransaction_announcesOnRetire);
 #endif
 
     exit(UNITY_END());
