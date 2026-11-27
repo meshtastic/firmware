@@ -297,7 +297,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         display->drawString(startingHourMinuteTextX, bottomRowY, period);
     }
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     display->drawString(hourMinuteTextX - CLOCK_CHAR_GAP - display->getStringWidth(secondString), bottomRowY, secondString);
 #endif
 
@@ -368,7 +368,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             bool isPM = hour >= 12;
             display->setFont(FONT_SMALL);
             int yOffset = (currentResolution == ScreenResolution::High) ? 1 : 0;
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
             yOffset += 3;
 #endif
             display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY + yOffset,
@@ -419,7 +419,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // draw hour tick mark
                 display->drawLine(startX, startY, endX, endY);
 
-                static char buffer[2];
+                static char buffer[3]; // drawStringf is an unbounded vsprintf: "12" plus the terminator
 
                 uint8_t hourInt = (angle / 30);
 
@@ -457,7 +457,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // draw hour number
                 display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
 #else
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
                 if (currentResolution == ScreenResolution::High) {
                     // draw hour number
                     display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
@@ -488,7 +488,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // draw minute hand
         display->drawLine(centerX, centerY, minuteX, minuteY);
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
 #endif

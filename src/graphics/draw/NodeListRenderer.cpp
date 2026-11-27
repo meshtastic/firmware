@@ -159,7 +159,7 @@ const char *getCurrentModeTitle_Nodes(int screenWidth)
     case MODE_LAST_HEARD:
         return "Last Heard";
     case MODE_HOP_SIGNAL:
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
         return "Hops/Sig";
 #else
         return (currentResolution == ScreenResolution::High) ? "Hops/Signal" : "Hops/Sig";
@@ -816,7 +816,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 // Screen Frame Functions
 // =============================
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
 // Node list for Last Heard and Hop Signal views
 void drawDynamicListScreen_Nodes(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -903,7 +903,7 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
 }
 #endif
 
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     const char *title = "Last Heard";
@@ -912,7 +912,7 @@ void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     const char *title = "Hops/Sig";
 #else
 
