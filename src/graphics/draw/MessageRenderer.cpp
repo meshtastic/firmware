@@ -11,6 +11,7 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/EmoteRenderer.h"
+#include "graphics/JapaneseLineBreak.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -827,7 +828,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 const bool thisLineHasEmote =
                     graphics::EmoteRenderer::analyzeLine(nullptr, cachedLines[b.start].c_str(), 0, emotes, numEmotes).hasEmote;
                 if (thisLineHasEmote) {
+#ifdef OLED_JA
+                    constexpr int EMOTE_PADDING_ABOVE = 0; // matches calculateLineHeights
+#else
                     constexpr int EMOTE_PADDING_ABOVE = 4;
+#endif
                     visualTop -= EMOTE_PADDING_ABOVE;
                 }
                 topY = visualTop - BUBBLE_PAD_Y;
@@ -1047,9 +1052,13 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
     const size_t len = strlen(messageBuf);
     std::string line, word;
     size_t pos = 0;
+#ifdef OLED_JA
+    uint32_t jaBase = 0; // last visible character drawn from the Japanese table, 0 if the last one was not
+#endif
     while (pos < len) {
         // Advance one whole unit (emote or UTF-8 char) so a break never lands inside one
         size_t unitLen = 0;
+        bool isEmote = false;
         if ((unsigned char)messageBuf[pos] == 0xE2 && (unsigned char)messageBuf[pos + 1] == 0x80 &&
             (unsigned char)messageBuf[pos + 2] == 0x99) {
             word += '\''; // U+2019 right single quote -> plain apostrophe
@@ -1070,22 +1079,39 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
                 ++pos;
                 continue;
             }
-            if (!graphics::EmoteRenderer::findEmoteAt(messageBuf, len, pos, unitLen))
+            isEmote = graphics::EmoteRenderer::findEmoteAt(messageBuf, len, pos, unitLen);
+            if (!isEmote)
                 unitLen = std::min(graphics::EmoteRenderer::utf8CharLen((uint8_t)ch), len - pos);
             word.append(messageBuf + pos, unitLen);
             pos += unitLen;
         }
 
-        if (graphics::UIRenderer::measureStringWithEmotes(display, line + word) <= textWidth)
-            continue;
-        // Overflow: move the word to a fresh line
-        if (!line.empty())
-            pushLine(line);
-        // Word too long for a line by itself: break it before the unit that overflowed
-        if (word.size() > unitLen && graphics::UIRenderer::measureStringWithEmotes(display, word) > textWidth) {
-            lines.push_back(word.substr(0, word.size() - unitLen));
-            word.erase(0, word.size() - unitLen);
+        if (graphics::UIRenderer::measureStringWithEmotes(display, line + word) > textWidth) {
+            // Overflow: move the word to a fresh line
+            if (!line.empty())
+                pushLine(line);
+            // Word too long for a line by itself: break it before the unit that overflowed
+            if (word.size() > unitLen && graphics::UIRenderer::measureStringWithEmotes(display, word) > textWidth) {
+                lines.push_back(word.substr(0, word.size() - unitLen));
+                word.erase(0, word.size() - unitLen);
+            }
         }
+#ifdef OLED_JA
+        // Japanese has no spaces: allow a break after each character drawn from the Japanese table unless kinsoku
+        // rules forbid it. Emotes stay atomic, and invisible modifiers defer the decision to the character they follow.
+        const size_t unitPos = pos - unitLen;
+        uint32_t cp = 0;
+        size_t glyphLen = 0;
+        int glyphAdvance = 0;
+        if (isEmote || graphics::KanjiFont::decodeUtf8(messageBuf, unitPos, len, cp) != unitLen)
+            jaBase = 0;
+        else if (!graphics::KanjiFont::isInvisibleModifier(cp))
+            jaBase = graphics::KanjiFont::findGlyphAt(messageBuf, unitPos, len, glyphLen, glyphAdvance) ? cp : 0;
+        if (jaBase && graphics::JapaneseLineBreak::canBreakBetween(jaBase, messageBuf + pos, len - pos)) {
+            line += word;
+            word.clear();
+        }
+#endif
     }
 
     line += word;
@@ -1099,9 +1125,15 @@ std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, con
     // Tunables for layout control
     constexpr int HEADER_UNDERLINE_GAP = 0; // space between underline and first body line
     constexpr int HEADER_UNDERLINE_PIX = 1; // underline thickness (1px row drawn)
-    constexpr int BODY_LINE_LEADING = -4;   // default vertical leading for normal body lines
-    constexpr int EMOTE_PADDING_ABOVE = 4;  // space above emote line (added to line above)
-    constexpr int EMOTE_PADDING_BELOW = 3;  // space below emote line (added to emote line)
+#ifdef OLED_JA
+    constexpr int BODY_LINE_LEADING = -2;  // 11px-tall Japanese glyphs need two more rows than Latin text
+    constexpr int EMOTE_PADDING_ABOVE = 0; // 12x12 emotes share the kanji cell
+    constexpr int EMOTE_PADDING_BELOW = 1; // their bottom row would touch the next line
+#else
+    constexpr int BODY_LINE_LEADING = -4;  // default vertical leading for normal body lines
+    constexpr int EMOTE_PADDING_ABOVE = 4; // space above emote line (added to line above)
+    constexpr int EMOTE_PADDING_BELOW = 3; // space below emote line (added to emote line)
+#endif
 
     std::vector<int> rowHeights;
     rowHeights.reserve(lines.size());

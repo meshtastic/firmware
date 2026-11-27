@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_SCREEN
+#if HAS_SCREEN && !defined(OLED_JA)
 #include "emotes.h"
 
 namespace graphics
