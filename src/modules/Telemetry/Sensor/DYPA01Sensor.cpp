@@ -129,7 +129,9 @@ uint32_t DYPA01Sensor::telemetryIntervalMs() const
 
 static uint32_t controlledBudgetMs()
 {
-    return (uint32_t)DYP_A01_MAX_BURST_ATTEMPTS * DYP_A01_BURST_SAMPLES * DYP_A01_MIN_TRIGGER_GAP_MS +
+    const uint32_t postAndRead = DYP_A01_POST_TRIGGER_WAIT_MS + DYP_A01_READ_WINDOW_MS;
+    const uint32_t perSampleMs = postAndRead > DYP_A01_MIN_TRIGGER_GAP_MS ? postAndRead : DYP_A01_MIN_TRIGGER_GAP_MS;
+    return (uint32_t)DYP_A01_MAX_BURST_ATTEMPTS * DYP_A01_BURST_SAMPLES * perSampleMs +
            (uint32_t)(DYP_A01_MAX_BURST_ATTEMPTS - 1) * DYP_A01_RETRY_DELAY_MS;
 }
 
@@ -246,13 +248,8 @@ int32_t DYPA01Sensor::runOnce()
 
 bool DYPA01Sensor::ensureBurstForPublish()
 {
-    // Fresh cache from this interval: publish without blocking.
-    if (phase == Phase::Idle && hasValidReading && !burstIsDue())
-        return true;
-
-    // Publishing with no usable cache must not wait out the telemetry interval.
     if (phase == Phase::Idle && !burstIsDue())
-        burstCompleted = false;
+        return hasValidReading;
 
     const uint32_t startedMs = Time::getMillis();
     const uint32_t budgetMs = controlledBudgetMs() + 500;
@@ -263,7 +260,8 @@ bool DYPA01Sensor::ensureBurstForPublish()
         if (waitMs > 0)
             delay((uint32_t)waitMs);
     }
-    return hasValidReading;
+    // The in-flight burst resumes on the next call; the previous median is not this burst's.
+    return false;
 }
 
 bool DYPA01Sensor::getMetrics(meshtastic_Telemetry *measurement)
