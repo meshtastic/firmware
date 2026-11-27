@@ -27,6 +27,10 @@
 // The regression guarded: a dirty node database that is never saved.
 // NodeDB::updateFrom() in src/mesh/NodeDB.cpp must also schedule a save when a known peer's RF slot
 // changes. Otherwise a restart can restore stale LoRa evidence even though the radio heard that peer.
+// NodeDB::stampRfHear() must apply the same keep rule as NodeDB::cleanupMeshDB(): a node survives a
+// reboot when it has user info or is ignored, so a block set by bare node ID is kept with no NodeInfo.
+// A slot change on such a node is state that outlives the boot and has to be saved. The regression
+// guarded: gating the save on user info alone, which leaves the blocked node's slot unwritten.
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -397,6 +401,38 @@ static void test_updateFrom_rfSlotChanges_arePersisted(void)
     TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(&*saved, otherSlot));
 }
 
+static void test_updateFrom_rfSlotChangeOnIgnoredNodeWithoutUser_isPersisted(void)
+{
+    constexpr NodeNum kBlocked = 0xE1000105;
+    Time::setTestMillis(70 * 60 * 1000);
+
+    // The set_ignored_node admin path: an entry created by bare node ID, flagged and saved.
+    meshtastic_NodeInfoLite *blocked = nodeDB->getOrCreateMeshNode(kBlocked);
+    TEST_ASSERT_NOT_NULL(blocked);
+    TEST_ASSERT_TRUE(nodeDB->setProtectedFlag(blocked, NODEINFO_BITFIELD_IS_IGNORED_MASK, true));
+    TEST_ASSERT_FALSE(nodeInfoLiteHasUser(blocked));
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_NODEDATABASE));
+    TEST_ASSERT_FALSE(NodeDBTestShim::dirty(nodeDB));
+
+    auto saved = persistedNode(kBlocked);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(&*saved));
+
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    packet.from = kBlocked;
+    nodeDB->updateFrom(packet);
+    const uint16_t homeSlot = nodeDB->committedLoraSlot();
+    // The stamp landed in RAM, so a failure below is a missing save and not a dropped packet.
+    TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(nodeDB->getMeshNode(kBlocked), homeSlot));
+
+    notifyReboot.notifyObservers(nullptr);
+    saved = persistedNode(kBlocked);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(&*saved, homeSlot));
+}
+
 void setUp(void)
 {
     scriptRail({});
@@ -431,6 +467,7 @@ NSR_TEST_ENTRY void setup()
     RUN_TEST(test_updateUser_deferredPeer_isPersistedAfterThrottle);
     RUN_TEST(test_updateUser_deferredPeer_isPersistedOnReboot);
     RUN_TEST(test_updateFrom_rfSlotChanges_arePersisted);
+    RUN_TEST(test_updateFrom_rfSlotChangeOnIgnoredNodeWithoutUser_isPersisted);
 
     exit(UNITY_END());
 }
