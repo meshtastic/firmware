@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "GPSStatus.h"
+#include "GPSUpdateScheduling.h"
 #include "GpioLogic.h"
 #include "NmeaTimeEstimator.h"
 #include "Observer.h"
@@ -50,7 +51,6 @@
 #define HAS_AIROHA_SLEEP 1
 #endif
 
-static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
 static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 
 typedef enum {
