@@ -1,4 +1,5 @@
 #include "Breakout.h"
+#include <cstring> // strcmp, for the stick-source test in isPolledStickRepeat()
 
 // ===========================================================================
 // Pure BreakoutGame logic (no display/FS dependencies; always compiled)
@@ -26,11 +27,18 @@ void BreakoutGame::serveBall()
 {
     // Centre the paddle and launch the ball upward from just above it, at a slight angle whose
     // side is chosen randomly so successive serves are not identical.
-    paddleLeft = (BOARD_W - PADDLE_W) / 2;
+
     ballPxX = static_cast<int32_t>(BOARD_W / 2) * SUBPX;
     ballPxY = static_cast<int32_t>(PADDLE_Y - 2) * SUBPX;
     ballVx = (nextRandom() & 1u) ? 28 : -28;
     ballVy = -BALL_VY;
+    ballDocked = true; // wait for the player to fire before the ball moves
+}
+
+void BreakoutGame::launchBall()
+{
+    if (alive)
+        ballDocked = false;
 }
 
 void BreakoutGame::nextLevel()
@@ -48,6 +56,9 @@ void BreakoutGame::reset(uint32_t seed)
     levelNum = 1;
     alive = true;
     ballTick = false;
+    // A new game starts centred. serveBall() deliberately does NOT re-centre, so the paddle keeps
+    // the player's position between lives.
+    paddleLeft = (BOARD_W - PADDLE_W) / 2;
     buildBricks();
     serveBall();
 }
@@ -77,6 +88,14 @@ bool BreakoutGame::step()
 {
     if (!alive)
         return false;
+
+    // Waiting to serve: the ball rides the centre of the paddle (so it still aims by sliding) and
+    // no physics, collisions or life losses happen until the player fires it.
+    if (ballDocked) {
+        ballPxX = static_cast<int32_t>(paddleLeft + PADDLE_W / 2) * SUBPX;
+        ballPxY = static_cast<int32_t>(PADDLE_Y - 2) * SUBPX;
+        return true;
+    }
 
     // The ball advances on every other step() so the caller can tick (and poll the paddle) at twice
     // the ball's rate -- this keeps the ball speed constant while paddle control refreshes faster.
@@ -165,6 +184,9 @@ bool BreakoutGame::step()
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
+#if ARCH_PORTDUINO
+#include "input/ArcadeBonnet.h"
+#endif
 #if ARCH_PORTDUINO && defined(__linux__)
 #include "input/LinuxJoystick.h"
 #endif
@@ -208,36 +230,79 @@ int32_t Breakout::tickIntervalMs() const
     return iv / 2;
 }
 
-bool Breakout::tick()
+// The held horizontal zone (-1 / 0 / +1) of whichever polled stick is pushed: the USB gamepad's
+// D-pad or the Arcade Bonnet's joystick. Both report it the instant the stick moves, independent of
+// their slow typematic repeat.
+static int heldPaddleZone()
 {
 #if ARCH_PORTDUINO && defined(__linux__)
-    // Poll the joystick's held direction directly so the paddle glides continuously instead of
-    // creeping along at the D-pad's slow auto-repeat rate.
-    if (aLinuxJoystick) {
-        const int held = aLinuxJoystick->heldXZone();
-        if (held < 0)
-            game.movePaddle(-PADDLE_POLL_STEP);
-        else if (held > 0)
-            game.movePaddle(PADDLE_POLL_STEP);
-    }
+    if (aLinuxJoystick && aLinuxJoystick->heldXZone() != 0)
+        return aLinuxJoystick->heldXZone();
 #endif
+#if ARCH_PORTDUINO
+    if (arcadeBonnet && arcadeBonnet->heldXZone() != 0)
+        return arcadeBonnet->heldXZone();
+#endif
+    return 0;
+}
+
+// True if this LEFT/RIGHT is a polled stick's own repeat while that stick is held, which tick()
+// already turns into paddle movement. All three parts are load-bearing:
+//   source  -- the event actually came from that stick. Without it, LEFT/RIGHT from the keyboard
+//              or touchscreen is swallowed too; aLinuxJoystick is constructed on every Linux host
+//              whether or not a gamepad is configured, so a pointer check alone is true even with
+//              nothing attached.
+//   kbchar  -- no button produced it, so it is the stick axis. A shoulder button mapped to
+//              left/right is a discrete press the axis poll knows nothing about, and must still
+//              nudge the paddle.
+//   heldX   -- the axis is what is driving right now, so tick() already has it covered.
+static bool isPolledStickRepeat(const InputEvent *event)
+{
+    if (event->kbchar != 0 || !event->source)
+        return false;
+#if ARCH_PORTDUINO && defined(__linux__)
+    if (aLinuxJoystick && aLinuxJoystick->originName() && strcmp(event->source, aLinuxJoystick->originName()) == 0)
+        return aLinuxJoystick->heldXZone() != 0;
+#endif
+#if ARCH_PORTDUINO
+    if (arcadeBonnet && arcadeBonnet->originName() && strcmp(event->source, arcadeBonnet->originName()) == 0)
+        return arcadeBonnet->heldXZone() != 0;
+#endif
+    return false;
+}
+
+bool Breakout::tick()
+{
+    // Poll the stick's held direction directly so the paddle glides continuously instead of
+    // creeping along at the D-pad's slow auto-repeat rate.
+    const int held = heldPaddleZone();
+    if (held < 0)
+        game.movePaddle(-PADDLE_POLL_STEP);
+    else if (held > 0)
+        game.movePaddle(PADDLE_POLL_STEP);
     return game.step();
 }
 
-void Breakout::handleInput(input_broker_event ev)
+void Breakout::handleInput(const InputEvent *event)
 {
-#if ARCH_PORTDUINO && defined(__linux__)
-    // When a joystick is present the paddle is polled continuously in tick(); ignore the discrete
-    // (and slow) repeat events so we don't double-move.
-    if (aLinuxJoystick)
-        return;
-#endif
+    const input_broker_event ev = event->inputEvent;
     switch (ev) {
     case INPUT_BROKER_LEFT:
-        game.moveLeft();
-        break;
     case INPUT_BROKER_RIGHT:
-        game.moveRight();
+        // While a polled stick is held, tick() moves the paddle itself; its repeats would double-move.
+        if (isPolledStickRepeat(event))
+            break;
+        if (ev == INPUT_BROKER_LEFT)
+            game.moveLeft();
+        else
+            game.moveRight();
+        break;
+    // Serve: B (CANCEL/BACK, forwarded here via wantsBackButton) or A (SELECT) fires a docked ball.
+    case INPUT_BROKER_CANCEL:
+    case INPUT_BROKER_BACK:
+    case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
+        game.launchBall();
         break;
     default:
         break;
@@ -297,6 +362,12 @@ void Breakout::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
 
     // Ball.
     display->fillRect(x + game.ballX(), y + game.ballY(), 2, 2);
+
+    // Waiting to serve: prompt the player (the ball rides the paddle until then).
+    if (game.isBallDocked()) {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + display->getWidth() / 2, y + BreakoutGame::PADDLE_Y - FONT_HEIGHT_SMALL - 4, "B TO SERVE");
+    }
 
 #if GRAPHICS_TFT_COLORING_ENABLED
     // Colour the wall by row, plus a blue paddle and white ball. One region per brick row (the row's

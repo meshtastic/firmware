@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/RepeatScalingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -51,6 +52,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
+                ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                 if (reprocessPacket(p))
                     perhapsRebroadcast(p);
             }
@@ -66,6 +68,11 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
+    // We never relay our own packets: consume an upgraded copy with our number without touching the TX
+    // queue, rather than let it fall through to the dupe handling (perhapsCancelDupe) as well.
+    if (isFromUs(p))
+        return true;
+
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
         // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
@@ -81,6 +88,7 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
+            ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
             if (!reprocessPacket(p))
                 return true;
             perhapsRebroadcast(p);
@@ -96,6 +104,11 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
+    // Reprocessing a dupe is for relaying it; our own packets are never relayed, and their implicit ACK
+    // is generated in ReliableRouter::shouldFilterReceived before any dupe handling.
+    if (isFromUs(p))
+        return false;
+
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
         if (decodedState != DecodeState::DECODE_SUCCESS && decodedState != DecodeState::DECODE_OPAQUE)
@@ -106,10 +119,8 @@ bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
         nodeDB->updateFrom(*p);
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
-        traceRouteModule->processUpgradedPacket(*p);
-    }
+    if (traceRouteModule)
+        traceRouteModule->updateRoute(*const_cast<meshtastic_MeshPacket *>(p));
 #endif
     return true;
 }
@@ -136,11 +147,22 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
+    // Only LoRa duplicates mean another node has already rebroadcast this packet over RF.
+    if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
+        return;
+
+    // Only a duplicate of a packet we still have queued can cancel anything, or take a tracker slot
+    if (roleAllowsCancelingDupe(p) && findInTxQueue(p->from, p->id)) {
+        if (favoriteMayHaveMissedBroadcast(p)) {
+            // The relayer we just heard may be out of our favorite's range, so fill in late instead of dropping
+            if (iface)
+                iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+        } else if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
+            // Without the module, cancel on the first duplicate
+            // cancel rebroadcast of this message *if* there was already one, unless we're a router!
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
@@ -149,6 +171,28 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
         nodeDB->isFromOrToFavoritedNode(*p)) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
+}
+
+bool FloodingRouter::favoriteMayHaveMissedBroadcast(const meshtastic_MeshPacket *p)
+{
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE || !isBroadcast(p->to) || !nodeDB)
+        return false;
+
+    const NodeNum self = nodeDB->getNodeNum();
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == self || !nodeInfoLiteIsFavorite(node) || !node->has_hops_away || node->hops_away != 0)
+            continue;
+
+        const uint8_t relayer = nodeDB->getLastByteOfNodeNum(node->num);
+        NodeNum resolved = 0;
+        // A colliding relay byte can't prove this favorite has the packet, so it counts as missed
+        const bool favoriteRelayed =
+            p->relay_node == relayer && nodeDB->resolveUniqueLastByte(relayer, false, &resolved) && resolved == node->num;
+        if (!favoriteRelayed)
+            return true;
+    }
+    return false;
 }
 
 bool FloodingRouter::isRebroadcaster()

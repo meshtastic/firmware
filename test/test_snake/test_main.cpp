@@ -1,3 +1,10 @@
+// SnakeGame rings, direction changes, growth and collisions.
+//
+// Why: pure game logic with no other coverage; a step/collision regression is otherwise
+// only visible on the device.
+// Regression guarded: a reversal accepted, food on the body, or a collision not ending the
+// game.
+
 #include "TestUtil.h"
 #include "modules/games/Snake.h"
 #include <unity.h>
@@ -62,6 +69,46 @@ static void test_setDirection_rejectsReversal()
     // still checked against the committed RIGHT and rejected, so the neck stays safe.
     game.setDirection(SnakeGame::DIR_UP);
     TEST_ASSERT_FALSE(game.setDirection(SnakeGame::DIR_LEFT));
+}
+
+// turn() is the shoulder-button steering: a quarter turn relative to the current heading rather
+// than an absolute direction. A quarter turn is never a reversal, so it always takes.
+static void test_turn_cyclesThroughHeadings()
+{
+    SnakeGame game;
+    game.reset(kSeed); // heading right
+    game.placeFoodAt(0, 0);
+
+    // Clockwise on screen (y grows downward): RIGHT -> DOWN -> LEFT -> UP -> RIGHT.
+    const SnakeGame::Direction cw[] = {SnakeGame::DIR_DOWN, SnakeGame::DIR_LEFT, SnakeGame::DIR_UP, SnakeGame::DIR_RIGHT};
+    for (SnakeGame::Direction want : cw) {
+        game.turn(true);
+        TEST_ASSERT_TRUE(game.step()); // commit the pending turn
+        TEST_ASSERT_EQUAL_INT(want, game.direction());
+    }
+
+    // Counter-clockwise runs the cycle backwards: RIGHT -> UP -> LEFT -> DOWN -> RIGHT.
+    const SnakeGame::Direction ccw[] = {SnakeGame::DIR_UP, SnakeGame::DIR_LEFT, SnakeGame::DIR_DOWN, SnakeGame::DIR_RIGHT};
+    for (SnakeGame::Direction want : ccw) {
+        game.turn(false);
+        TEST_ASSERT_TRUE(game.step());
+        TEST_ASSERT_EQUAL_INT(want, game.direction());
+    }
+}
+
+// Two turns inside one tick must not chain into a 180 that runs the head into its own neck --
+// the second turn is taken from the committed heading, not the pending one.
+static void test_turn_twiceInOneTickIsNotAReversal()
+{
+    SnakeGame game;
+    game.reset(kSeed); // heading right
+    game.placeFoodAt(0, 0);
+
+    game.turn(true);
+    game.turn(true); // would be RIGHT -> DOWN -> LEFT if it chained
+    TEST_ASSERT_TRUE(game.step());
+    TEST_ASSERT_EQUAL_INT(SnakeGame::DIR_DOWN, game.direction());
+    TEST_ASSERT_TRUE(game.isPlaying());
 }
 
 static void test_step_movesAndTailFollows()
@@ -168,6 +215,8 @@ void setup()
     RUN_TEST(test_reset_initialState);
     RUN_TEST(test_food_isValidAndOffBody);
     RUN_TEST(test_setDirection_rejectsReversal);
+    RUN_TEST(test_turn_cyclesThroughHeadings);
+    RUN_TEST(test_turn_twiceInOneTickIsNotAReversal);
     RUN_TEST(test_step_movesAndTailFollows);
     RUN_TEST(test_eat_growsAndScores);
     RUN_TEST(test_wallCollision_endsGame);

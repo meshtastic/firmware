@@ -1,0 +1,6 @@
+# CLEAN: the serial module on a PTY meshtasticd creates. --output-yaml writes Path back
+# unchanged, and that output loads clean again.
+Lora:
+  Module: sim
+SerialModule:
+  Path: pty:/tmp/meshserial

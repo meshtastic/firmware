@@ -162,17 +162,29 @@ def is_dependency_update(pr_details):
     return False
 
 
+# The labels pr_enforce_labels.yml requires; a PR carrying one is sorted by label alone.
+REQUIRED_LABELS = {
+    "bugfix",
+    "enhancement",
+    "hardware-support",
+    "dependencies",
+    "submodules",
+    "github_actions",
+    "trunk",
+    "cleanup",
+}
+
+
 def is_enhancement(pr_details):
     """Determine if PR is an enhancement based on labels and title."""
-    labels = [label.get("name", "").lower() for label in pr_details.get("labels", [])]
+    labels = {label.get("name", "").lower() for label in pr_details.get("labels", [])}
 
-    # Check labels first
-    enhancement_labels = ["enhancement", "feature", "feat", "new feature"]
-    for label in labels:
-        if any(enh in label for enh in enhancement_labels):
+    if labels & REQUIRED_LABELS:
+        if "enhancement" in labels:
             return True
+        return "hardware-support" in labels and not labels & {"bugfix", "bug"}
 
-    # Check title prefixes
+    # PRs from before label enforcement fall back to title prefixes
     title = pr_details.get("title", "")
     enhancement_prefixes = ["feat:", "feature:", "add:"]
     title_lower = title.lower()

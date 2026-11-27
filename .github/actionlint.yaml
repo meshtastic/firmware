@@ -4,3 +4,6 @@ self-hosted-runner:
   labels:
     - arctastic
     - test-runner
+    # GitHub-Hosted runners:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm

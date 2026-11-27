@@ -1,5 +1,8 @@
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
+#include "SafeFile.h"
+#include "concurrency/LockGuard.h"
+#include "power/PowerHAL.h"
 
 #if defined(ARCH_ESP32)
 #include <driver/gpio.h>
@@ -9,13 +12,31 @@
 
 LoRaFEMInterface loraFEMInterface;
 
+static constexpr const char *LNA_AUTO_STATE_FILE = "/prefs/femLnaAuto.bin";
+static constexpr uint32_t LNA_AUTO_STATE_MAGIC = 0x4C4E4131; // "LNA1"
+
+// Noise-floor rise when the LNA is switched in at a noise-limited site; measured 23-25 dB on a Heltec V4.3 at 915 MHz
+static constexpr int16_t KCT8103L_LNA_GAIN_DB = 23;
+static constexpr uint32_t KCT8103L_LNA_SETTLE_US = 1000;
+
+// BQ35LORA900V1M discrete LNA on Station G3 (measured 11-12 dB rise at a noise-limited site)
+static constexpr int16_t STATION_G3_LNA_GAIN_DB = 12;
+static constexpr uint32_t STATION_G3_LNA_SETTLE_US = 1000;
+
+struct PersistedLnaAuto {
+    uint32_t magic;
+    uint32_t lnaOn;
+};
+
 static void enableFEMPower()
 {
+#if defined(LORA_PA_POWER)
     bool wasOff = digitalRead(LORA_PA_POWER) != HIGH;
     digitalWrite(LORA_PA_POWER, HIGH);
     if (wasOff) {
         delay(5); // This is an arbitrary 5ms for FEM rail power-up.
     }
+#endif
 }
 
 #if defined(ARCH_ESP32)
@@ -40,7 +61,9 @@ static void releasePinHold(int pin)
 
 static void releaseSleepHolds()
 {
+#if defined(LORA_PA_POWER)
     releasePinHold(LORA_PA_POWER);
+#endif
 #ifdef HELTEC_V4
     releasePinHold(LORA_KCT8103L_PA_CSD);
     releasePinHold(LORA_KCT8103L_PA_CTX);
@@ -50,13 +73,15 @@ static void releaseSleepHolds()
 #elif defined(USE_KCT8103L_PA)
     releasePinHold(LORA_KCT8103L_PA_CSD);
     releasePinHold(LORA_KCT8103L_PA_CTX);
+#elif defined(USE_STATION_G3_FEM)
+    releasePinHold(LORA_STATION_G3_LNA_EN);
 #endif
 }
 #endif
 
 void LoRaFEMInterface::init(void)
 {
-    setLnaCanControl(false); // Default is uncontrollable
+    lna_can_control = false; // Default is uncontrollable
 #if defined(RF_PA_DETECT_PIN)
     pinMode(RF_PA_DETECT_PIN, INPUT);
     high_power_pa = (digitalRead(RF_PA_DETECT_PIN) == RF_PA_HIGH_POWER_VALUE);
@@ -79,7 +104,7 @@ void LoRaFEMInterface::init(void)
         digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
         pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
         digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
-        setLnaCanControl(true);
+        setLnaControl(LORA_KCT8103L_PA_CTX, LOW, KCT8103L_LNA_GAIN_DB, KCT8103L_LNA_SETTLE_US);
     } else if (digitalRead(LORA_KCT8103L_PA_CSD) == LOW) {
         // FEM is GC1109
         fem_type = GC1109_PA;
@@ -123,7 +148,7 @@ void LoRaFEMInterface::init(void)
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
     pinMode(LORA_KCT8103L_PA_CTX, OUTPUT);
     digitalWrite(LORA_KCT8103L_PA_CTX, LOW); // LNA enabled by default
-    setLnaCanControl(true);
+    setLnaControl(LORA_KCT8103L_PA_CTX, LOW, KCT8103L_LNA_GAIN_DB, KCT8103L_LNA_SETTLE_US);
 #elif defined(USE_KCT8103L_PA_ONLY)
     fem_type = KCT8103L_PA;
     pinMode(LORA_KCT8103L_EN, OUTPUT);
@@ -131,6 +156,21 @@ void LoRaFEMInterface::init(void)
     delay(1);
     pinMode(LORA_KCT8103L_TX_RX, OUTPUT);
     digitalWrite(LORA_KCT8103L_TX_RX, LOW);
+#elif defined(USE_STATION_G3_FEM)
+    fem_type = STATION_G3_FEM;
+    LOG_INFO("Using Station G3 LoRa FEM");
+#if defined(ARCH_ESP32)
+    releasePinHold(LORA_STATION_G3_LNA_EN);
+#endif
+    pinMode(LORA_STATION_G3_LNA_EN, INPUT_PULLDOWN);
+    delay(1);
+    if (digitalRead(LORA_STATION_G3_LNA_EN) == HIGH) {
+        LOG_INFO("Station G3 LNA P jumper installed; LNA hardware-disabled");
+    } else {
+        pinMode(LORA_STATION_G3_LNA_EN, OUTPUT);
+        digitalWrite(LORA_STATION_G3_LNA_EN, LOW); // LNA enabled by default (Active LOW)
+        setLnaControl(LORA_STATION_G3_LNA_EN, LOW, STATION_G3_LNA_GAIN_DB, STATION_G3_LNA_SETTLE_US);
+    }
 #endif
 }
 
@@ -163,6 +203,10 @@ void LoRaFEMInterface::setSleepModeEnable(void)
 #elif defined(USE_KCT8103L_PA_ONLY)
     // shutdown the PA
     digitalWrite(LORA_KCT8103L_EN, LOW);
+#elif defined(USE_STATION_G3_FEM)
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    }
 #endif
 }
 
@@ -191,6 +235,10 @@ void LoRaFEMInterface::setTxModeEnable(void)
 #elif defined(USE_KCT8103L_PA_ONLY)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, HIGH);
+#elif defined(USE_STATION_G3_FEM)
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    }
 #endif
 }
 
@@ -207,27 +255,18 @@ void LoRaFEMInterface::setRxModeEnable(void)
     } else if (fem_type == KCT8103L_PA) {
         enableFEMPower();
         digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
-        if (lna_enabled) {
-            digitalWrite(LORA_KCT8103L_PA_CTX, LOW);
-        } else {
-            digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
-        }
     }
 #elif defined(USE_GC1109_PA)
-    digitalWrite(LORA_GC1109_PA_EN, HIGH);    // CSD=1: Chip enabled
+    digitalWrite(LORA_GC1109_PA_EN, HIGH); // CSD=1: Chip enabled
     digitalWrite(LORA_GC1109_PA_TX_EN, LOW);
 #elif defined(USE_KCT8103L_PA)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_PA_CSD, HIGH);
-    if (lna_enabled) {
-        digitalWrite(LORA_KCT8103L_PA_CTX, LOW);
-    } else {
-        digitalWrite(LORA_KCT8103L_PA_CTX, HIGH);
-    }
 #elif defined(USE_KCT8103L_PA_ONLY)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, LOW);
 #endif
+    setRxLnaPath(lna_enabled);
 }
 
 void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
@@ -271,12 +310,98 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
 #elif defined(USE_KCT8103L_PA_ONLY)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, LOW);
+#elif defined(USE_STATION_G3_FEM)
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, lna_enabled ? LOW : HIGH);
+#if defined(ARCH_ESP32)
+        rtc_gpio_hold_en((gpio_num_t)LORA_STATION_G3_LNA_EN);
+#endif
+    }
 #endif
 }
 
-void LoRaFEMInterface::setLNAEnable(bool enabled)
+void LoRaFEMInterface::setLnaMode(meshtastic_Config_LoRaConfig_FEM_LNA_Mode mode)
 {
-    lna_enabled = enabled;
+    if (mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO) {
+        lna_auto = false;
+        lna_enabled = mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
+        return;
+    }
+    // Re-applying an unchanged config must not discard the measurement in progress
+    if (!lna_auto) {
+        lna_auto = true;
+        bool savedLnaOn;
+        if (loadLnaAutoDecision(savedLnaOn)) {
+            lna_enabled = savedLnaOn;
+            LOG_INFO("FEM LNA auto: starting %s, as last decided", lna_enabled ? "in" : "bypassed");
+        }
+        lna_auto_selector.reset(lna_enabled);
+    }
+}
+
+bool LoRaFEMInterface::loadLnaAutoDecision(bool &lnaOn)
+{
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto file = FSCom.open(LNA_AUTO_STATE_FILE, FILE_O_READ);
+    if (!file)
+        return false;
+    PersistedLnaAuto state{};
+    const bool readOk = file.read(reinterpret_cast<uint8_t *>(&state), sizeof(state)) == sizeof(state);
+    file.close();
+    if (!readOk || state.magic != LNA_AUTO_STATE_MAGIC || state.lnaOn > 1)
+        return false;
+    lnaOn = state.lnaOn;
+    lna_auto_saved = state.lnaOn;
+    return true;
+#else
+    return false;
+#endif
+}
+
+void LoRaFEMInterface::saveLnaAutoDecision(void)
+{
+#ifdef FSCom
+    if (!lna_auto || lna_auto_saved == (int8_t)lna_enabled || !powerHAL_isPowerLevelSafe())
+        return;
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    spiLock->unlock();
+    const PersistedLnaAuto state{LNA_AUTO_STATE_MAGIC, lna_enabled};
+    auto file = SafeFile(LNA_AUTO_STATE_FILE, true);
+    const size_t written = file.write(reinterpret_cast<const uint8_t *>(&state), sizeof(state));
+    if (file.close() && written == sizeof(state))
+        lna_auto_saved = lna_enabled;
+    else
+        LOG_WARN("FEM LNA auto: saving the decision failed");
+#endif
+}
+
+void LoRaFEMInterface::setLnaControl(uint8_t pin, uint8_t onLevel, int16_t gainDb, uint32_t settleUs)
+{
+    lna_can_control = true;
+    lna_pin = pin;
+    lna_on_level = onLevel;
+    lna_gain_db = gainDb;
+    lna_settle_us = settleUs;
+    lna_auto_selector = LnaAutoSelector(gainDb);
+}
+
+void LoRaFEMInterface::setRxLnaPath(bool lnaOn)
+{
+    if (lna_can_control) {
+#if defined(ARCH_ESP32)
+        releasePinHold(lna_pin);
+#endif
+        digitalWrite(lna_pin, lnaOn ? lna_on_level : !lna_on_level);
+    }
+}
+
+bool LoRaFEMInterface::addLnaAutoSample(int16_t rssiLnaOn, int16_t rssiLnaOff)
+{
+    const bool windowDone = lna_auto_selector.addSample(rssiLnaOn, rssiLnaOff);
+    lna_enabled = lna_auto_selector.isLnaOn();
+    return windowDone;
 }
 
 int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)

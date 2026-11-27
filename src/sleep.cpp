@@ -9,9 +9,11 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "TransmitHistory.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
+#include "input/ButtonHelper.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
@@ -36,7 +38,7 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 extern PCA95X5_CLS io;
 #endif
 
-#ifdef HAS_PPM
+#if defined(HAS_PPM) && !defined(T_DECK_PRO)
 #include <XPowersLib.h>
 extern XPowersPPM *PPM;
 #endif
@@ -44,6 +46,8 @@ extern XPowersPPM *PPM;
 #ifndef INCLUDE_vTaskSuspend
 #define INCLUDE_vTaskSuspend 0
 #endif
+
+void (*variantPowerOff)() = nullptr;
 
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
@@ -172,6 +176,16 @@ void initDeepSleep()
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s", wakeCause, bootCount, reason);
 #endif
 
+    // esp_restart(), which every panic ends in, keeps the GPIO registers, and light sleep leaves its wake pins as level
+    // interrupts. One still asserted fires nonstop from the first attachInterrupt(), trips the interrupt watchdog and so
+    // loops through every reboot. Nothing has attached an interrupt yet, so clear them all.
+    for (uint8_t i = 0; i < GPIO_NUM_MAX; i++) {
+        if (!GPIO_IS_VALID_GPIO((gpio_num_t)i))
+            continue;
+        gpio_intr_disable((gpio_num_t)i);
+        gpio_set_intr_type((gpio_num_t)i, GPIO_INTR_DISABLE);
+    }
+
 #if SOC_RTCIO_HOLD_SUPPORTED
     // If waking from sleep, release any and all RTC GPIOs
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
@@ -241,6 +255,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
         nimbleBluetooth->deinit();
 #endif
 
+    // Before the observers: they park peripherals (and pin holds) that a board kept alive by USB cannot recover.
+    if (msecToWake == portMAX_DELAY && variantPowerOff) {
+        if (!skipSaveNodeDb)
+            nodeDB->saveToDisk();
+        if (transmitHistory)
+            transmitHistory->saveToDisk();
+        console->flush();
+        variantPowerOff();
+        skipSaveNodeDb = true;
+    }
+
 #ifdef ARCH_ESP32
     if (!shouldLoraWake(msecToWake))
         notifyDeepSleep.notifyObservers(NULL);
@@ -257,8 +282,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     }
 
     // Persist broadcast transmit times so throttle survives reboot
-    if (transmitHistory)
-        transmitHistory->saveToDisk();
+    if (transmitHistory) {
+        if (msecToWake == portMAX_DELAY)
+            transmitHistory->saveToDisk();
+        else
+            transmitHistory->saveToDiskBeforeSleep(msecToWake);
+    }
 
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
@@ -270,7 +299,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
 #if defined(TRACKER_T1000_E) || defined(MESH_TRACKER_X1)
-#ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
@@ -278,7 +306,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef GPS_RESETB_OUT
     pinMode(GPS_RESETB_OUT, OUTPUT);
     digitalWrite(GPS_RESETB_OUT, LOW);
-#endif
 #endif
 
 #ifdef BUZZER_EN_PIN
@@ -339,7 +366,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 #endif
 
-#ifdef HAS_PPM
+// Keep T-Deck Pro battery power connected so BOOT can wake either revision from deep sleep.
+#if defined(HAS_PPM) && !defined(T_DECK_PRO)
     if (PPM) {
         // BQ25896 PMIC shutdown is a hard power-off state.
         // Only use it for "sleep forever" / explicit shutdown, because timed deep sleep
@@ -401,6 +429,91 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
 #ifdef ARCH_ESP32
 /**
+ * The GPIO an SX126x/SX128x/LR part raises its IRQ on, or -1 if there is no usable pin.
+ *
+ * Nearly every variant spells it LORA_DIO1, but a board may define SX126X_DIO1 / SX128X_DIO1 on a different
+ * pin (t-eth-elite, where LORA_DIO1 is the SX1262's BUSY) or as the only one of the two (tlora_v2_1_18,
+ * betafpv_2400_tx_micro), because that is the name RadioInterface hands to the driver. Resolve it per
+ * radio rather than per macro, so arming, polling and teardown below cannot pick different pins.
+ * RF95 keeps RF95_IRQ.
+ */
+static int loraWakeDio1Pin()
+{
+#if defined(SX126X_DIO1) && (SX126X_DIO1 != RADIOLIB_NC)
+    if (radioType == SX1262_RADIO || radioType == SX1268_RADIO || radioType == LLCC68_RADIO)
+        return (int)SX126X_DIO1;
+#endif
+#if defined(SX128X_DIO1) && (SX128X_DIO1 != RADIOLIB_NC)
+    if (radioType == SX1280_RADIO)
+        return (int)SX128X_DIO1;
+#endif
+#if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    return (int)LORA_DIO1;
+#endif
+    return -1;
+}
+
+/**
+ * Is the LoRa IRQ line already asserted right now?
+ *
+ * DIO1 (SX126x/SX128x) and RF95_IRQ are active-high, so a HIGH level means the radio has already
+ * latched an interrupt (typically an RX_DONE). If that edge lands in the small window between
+ * enableLoraInterrupt() and esp_light_sleep_start(), the DIO ISR fires and detachInterrupt() clears
+ * the per-pin GPIO wake enable as a side effect - the node would then sleep with the packet latched
+ * but the wake source disarmed, stranding it for the rest of the sleep chunk (up to 30s). Reading the
+ * raw line just before sleeping lets us skip that sleep and let the main loop service the packet.
+ * Boards where DIO1 is a virtual/expander pin never reach here - doLightSleep() returns early on
+ * LORA_DIO1_EXTENDED_IO before this is called.
+ */
+static bool loraWakeIrqAsserted()
+{
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    if (radioType == RF95_RADIO)
+        return gpio_get_level((gpio_num_t)RF95_IRQ) == 1;
+#endif
+    const int dio1 = loraWakeDio1Pin();
+    if (dio1 >= 0 && radioType != RF95_RADIO)
+        return gpio_get_level((gpio_num_t)dio1) == 1;
+    return false;
+}
+
+// Drop the wake enable on every LoRa line enableLoraInterrupt() may have armed, without touching the edge ISR.
+static void disarmLoraWake()
+{
+    const int dio1 = loraWakeDio1Pin();
+    if (dio1 >= 0)
+        gpio_wakeup_disable((gpio_num_t)dio1);
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    if (radioType == RF95_RADIO)
+        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+#endif
+}
+
+// The radio ISR is rising-edge and stays attached with the RX readout task. As a level wake source it would fire
+// nonstop, starving the readout task that clears the IRQ, so mask it while armed and restore the edge type after.
+static void armLoraWakePin(gpio_num_t pin)
+{
+    gpio_intr_disable(pin);
+    gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
+}
+
+static void restoreLoraIrqPin(gpio_num_t pin)
+{
+    gpio_wakeup_disable(pin); // leaves the level type in place
+    gpio_set_intr_type(pin, GPIO_INTR_POSEDGE);
+    gpio_intr_enable(pin);
+    // The edge that woke us was consumed by the sleep; deliver an IRQ that is already pending.
+    if (gpio_get_level(pin) == 1 && RadioLibInterface::instance)
+        RadioLibInterface::instance->pollMissedIrqs();
+}
+
+// Consecutive sleeps skipped because the LoRa IRQ was already asserted. A line stuck high would
+// otherwise stop the node sleeping for good, so give up on skipping once it stops looking transient.
+static uint8_t loraIrqSkippedSleeps = 0;
+#define LORA_IRQ_SKIP_SLEEP_WARN 3
+#define LORA_IRQ_SKIP_SLEEP_MAX 5
+
+/**
  * enter light sleep (preserves ram but stops everything about CPU).
  *
  * Returns (after restoring hw state) when the user presses a button or we get a LoRa interrupt
@@ -427,8 +540,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-#if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#if (defined(BUTTON_PIN) || HAS_BUTTON) && defined(BUTTON_NEED_PULLUP)
+    uint32_t espBtnPin = getResolvedButtonPin();
+    if (espBtnPin != 0xFF) {
+        gpio_pullup_en((gpio_num_t)espBtnPin);
+    }
 #endif
 
 #ifdef SERIAL0_RX_GPIO
@@ -451,7 +567,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef ROTARY_PRESS
-    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
@@ -463,11 +578,19 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
+    // Mask the CPU interrupt: the level type would storm an ISR that cannot clear the expander's latched INT.
+    gpio_intr_disable((gpio_num_t)BOARD_PCA9535_INT);
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
-#ifdef BUTTON_PIN
-    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+#if HAS_BUTTON || defined(BUTTON_PIN)
+    uint32_t espBtnPin2 = getResolvedButtonPin();
+    if (espBtnPin2 != 0xFF) {
+#ifdef BUTTON_WAKE_ACTIVE_HIGH
+        gpio_wakeup_enable((gpio_num_t)espBtnPin2, GPIO_INTR_HIGH_LEVEL);
+#else
+        gpio_wakeup_enable((gpio_num_t)espBtnPin2, GPIO_INTR_LOW_LEVEL);
+#endif
+    }
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
@@ -475,7 +598,14 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #else
 #define INPUTDRIVER_WAKE_BTN_PIN INPUTDRIVER_ENCODER_BTN
 #endif
+// Most of these switches idle high and pull to ground, but not all. Arming the wrong level on a
+// button that idles low means the wake condition is already true, and light sleep ends the
+// instant it begins. Defaults to low, so only a board that says otherwise changes behaviour.
+#if defined(INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW) && !INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
+    gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN, GPIO_INTR_LOW_LEVEL);
+#endif
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
@@ -505,7 +635,34 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
-    res = esp_light_sleep_start();
+    const bool loraIrqAsserted = loraWakeIrqAsserted();
+    const bool loraIrqPending = loraIrqAsserted && loraIrqSkippedSleeps < LORA_IRQ_SKIP_SLEEP_MAX;
+    if (loraIrqPending) {
+        // A LoRa IRQ is already pending (see loraWakeIrqAsserted). Don't sleep on top of it - return so
+        // the main loop services the packet now instead of stranding it until the next wake.
+        if (++loraIrqSkippedSleeps >= LORA_IRQ_SKIP_SLEEP_WARN)
+            LOG_WARN("LoRa IRQ still pending after %u skipped sleeps", loraIrqSkippedSleeps);
+        else
+            LOG_INFO("LoRa IRQ pending, skip light sleep to service packet");
+        res = ESP_OK;
+    } else {
+        // Either nothing pending, or the line has stayed high past LORA_IRQ_SKIP_SLEEP_MAX and the main
+        // loop is clearly not going to clear it. Never sleeping costs more than one stranded packet.
+        //
+        // Only reset the count once the line is seen low again. Resetting on every sleep we allow made a
+        // stuck-high line give LORA_IRQ_SKIP_SLEEP_MAX skips, one sleep, repeat, forever - and each
+        // skipped attempt still runs waitEnterSleep() and the whole notifyLightSleep/End pass, which
+        // detaches, arms and restores every wake pin. Once we have given up, stay given up.
+        if (!loraIrqAsserted) {
+            loraIrqSkippedSleeps = 0;
+        } else {
+            // Stuck past LORA_IRQ_SKIP_SLEEP_MAX: the high level would wake this sleep at once, so disarm the
+            // wake; the timer and buttons still wake it, and restoreLoraIrqPin() below re-arms the edge ISR.
+            LOG_WARN("LoRa IRQ stuck high, sleep with LoRa wake disarmed");
+            disarmLoraWake();
+        }
+        res = esp_light_sleep_start();
+    }
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d", res);
     }
@@ -521,9 +678,25 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BOARD_PCA9535_INT
     gpio_wakeup_disable((gpio_num_t)BOARD_PCA9535_INT);
 #endif
-#ifdef BUTTON_PIN
+#if HAS_BUTTON || defined(BUTTON_PIN)
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
-    gpio_wakeup_disable(pin);
+    if (espBtnPin2 != 0xFF) {
+        gpio_wakeup_disable((gpio_num_t)espBtnPin2);
+        // The level type would outlive the sleep and storm once any pinMode() re-enables the pin's interrupt.
+        gpio_set_intr_type((gpio_num_t)espBtnPin2, GPIO_INTR_DISABLE);
+    }
+#endif
+#ifdef PMU_IRQ
+    // Undo the arming above. PMU_IRQ was the only light-sleep wake pin left armed after the sleep, so
+    // its GPIO_INTR_LOW_LEVEL type and wake-enable bit stayed in the GPIO registers indefinitely. A
+    // panic or software reset is CPU-only and leaves those registers intact, so the next boot's first
+    // attachInterrupt() - attachPowerInterrupts() on the boards that define PMU_IRQ - installs the ISR
+    // service with a level condition already pending and nothing to clear it. gpio_wakeup_disable()
+    // alone leaves int_type behind, so set an edge type too, matching what the button path does.
+    if (pmu_found) {
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
+        gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+    }
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
@@ -536,18 +709,22 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Unconditional: the config can have changed while we were asleep.
     gpio_wakeup_disable((gpio_num_t)MOTION_WAKE_INT_PIN);
 #endif
-#if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    if (radioType != RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
+#if defined(LORA_DIO1) || defined(SX128X_DIO1)
+    const int wokeDio1 = loraWakeDio1Pin(); // must match what enableLoraInterrupt() armed
+    if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
+        restoreLoraIrqPin((gpio_num_t)wokeDio1);
     }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+        restoreLoraIrqPin((gpio_num_t)RF95_IRQ);
     }
 #endif
 
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    // When we skipped the sleep because a LoRa IRQ was already pending, esp_sleep_get_wakeup_cause()
+    // would report the previous real sleep's cause (e.g. TIMER); synthesize a GPIO cause so the
+    // handling below (and PowerFSM) takes the packet-service path instead of a stale timer path.
+    esp_sleep_wakeup_cause_t cause = loraIrqPending ? ESP_SLEEP_WAKEUP_GPIO : esp_sleep_get_wakeup_cause();
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
@@ -607,11 +784,16 @@ void enableLoraInterrupt()
 {
 #if defined(LORA_DIO1_EXTENDED_IO)
     // DIO1 is a virtual pin on an I/O expander - it cannot be a GPIO wakeup source
-#elif SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#elif defined(LORA_DIO1) || defined(SX128X_DIO1)
+    // Not also gated on SOC_PM_SUPPORT_EXT_WAKEUP: that is an IDF alias for ESP32/S2/S3 only, and nothing
+    // here uses ext wakeup - GPIO light-sleep wake and the pin pulls exist on every ESP32 variant.
+    const int loraDio1 = loraWakeDio1Pin();
     esp_err_t res;
-    res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
-    if (res != ESP_OK) {
-        LOG_ERROR("gpio_pulldown_en(LORA_DIO1) result %d", res);
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
+        res = gpio_pulldown_en((gpio_num_t)loraDio1);
+        if (res != ESP_OK) {
+            LOG_ERROR("gpio_pulldown_en(lora dio1) result %d", res);
+        }
     }
 #if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
     res = gpio_pullup_en((gpio_num_t)LORA_RESET);
@@ -627,19 +809,16 @@ void enableLoraInterrupt()
     loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
-    LOG_INFO("Wake on LORA_DIO1 (GPIO%02d) gpio interrupt", LORA_DIO1);
-    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
-
-#elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    if (radioType != RF95_RADIO) {
-        LOG_INFO("Wake on LORA_DIO1 (GPIO%02d) gpio interrupt", LORA_DIO1);
-        gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
+        LOG_INFO("Wake on LoRa DIO1 (GPIO%02d) gpio interrupt", loraDio1);
+        armLoraWakePin((gpio_num_t)loraDio1);
     }
+
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
         LOG_INFO("Wake on RF95_IRQ (GPIO%02d) gpio interrupt", RF95_IRQ);
-        gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+        armLoraWakePin((gpio_num_t)RF95_IRQ); // RF95 interrupt, active high
     }
 #endif
 }

@@ -1,0 +1,12 @@
+# CLEAN. The first file has an empty radio path, but the later config.d file
+# supplies one, so the effective configuration is usable and --check must not
+# report the earlier empty value as an error.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sx1262
+  spidev: ""
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18

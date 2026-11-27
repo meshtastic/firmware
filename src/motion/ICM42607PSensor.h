@@ -20,6 +20,9 @@ class ICM42607PSensor : public MotionSensor
     ~ICM42607PSensor() override;
     virtual bool init() override;
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
 };
 
 #endif

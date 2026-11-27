@@ -11,6 +11,7 @@
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "airtime.h"
+#include "mesh/Router.h"
 #include <cstdint>
 #include <cstdio>
 #include <unity.h>
@@ -587,16 +588,9 @@ void test_rotation_is_once_per_second_regardless_of_entry_point()
                                      "rotation must be driven by the clock, not by the call count");
 }
 
-void test_period_constants_are_stable()
-{
-    Time::setTestMillis(0);
-    AirTime a;
-
-    // Public API: ContentHandler sizes its buffer from getPeriodsToLog().
-    TEST_ASSERT_EQUAL_UINT8(8, a.getPeriodsToLog());
-    TEST_ASSERT_EQUAL_UINT32(3600, a.getSecondsPerPeriod());
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(PERIODS_TO_LOG, a.getPeriodsToLog(), "the accessor and the macro must agree");
-}
+// Public API: ContentHandler sizes its buffer from getPeriodsToLog().
+static_assert(AirTime::getPeriodsToLog() == 8, "airtime log depth changed");
+static_assert(AirTime::getSecondsPerPeriod() == 3600, "airtime period length changed");
 
 // ============================================================================
 // Window decay, gates, and sleep behaviour. Three kinds of test:
@@ -1095,10 +1089,9 @@ void test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle()
     TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "70% of the allowance is over the polite half");
 }
 
-// Two thresholds ride on one figure: isTxAllowedAirUtil() is polite at half the
-// duty cycle, while Router::send() aborts only at the whole of it. There is a
-// band where the polite gate blocks and the hard gate would not - pinning it
-// here means an accuracy change has to be evaluated against both.
+// The polite gate stops at half the duty cycle; Router::send()'s hard gate stops at the whole of
+// it. At 70% of the allowance the polite gate blocks while the router still admits, which is the
+// band a change to either threshold would collapse.
 void test_router_send_gate_uses_the_whole_duty_cycle()
 {
     Time::setTestMillis(0);
@@ -1107,13 +1100,16 @@ void test_router_send_gate_uses_the_whole_duty_cycle()
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     initRegion();
     const float duty = getEffectiveDutyCycle();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, duty);
 
     AirTime a;
-    a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.70f)); // 70% of the allowance
+    a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.70f));
 
     TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "the polite gate blocks at 70% of the allowance");
-    TEST_ASSERT_TRUE_MESSAGE(a.utilizationTXPercent() < duty,
-                             "...while the figure is still under the whole duty cycle Router::send() uses");
+    TEST_ASSERT_TRUE_MESSAGE(Router::airUtilAllowsTx(a.utilizationTXPercent(), duty),
+                             "the hard gate still admits at 70% of the allowance");
+    TEST_ASSERT_TRUE_MESSAGE(Router::airUtilAllowsTx(duty, duty), "exactly the duty cycle is admitted");
+    TEST_ASSERT_FALSE_MESSAGE(Router::airUtilAllowsTx(duty + 0.01f, duty), "over the duty cycle is refused");
 }
 
 // getEffectiveDutyCycle() special-cases EU_866 by role. Every other region -
@@ -1352,7 +1348,6 @@ void setup()
     // sync idempotency
     RUN_TEST(test_repeated_sync_within_one_second_does_not_rotate);
     RUN_TEST(test_rotation_is_once_per_second_regardless_of_entry_point);
-    RUN_TEST(test_period_constants_are_stable);
 
     // --- phase 3: windows, gates, sleep ---
     RUN_TEST(test_oldest_period_falls_off_the_end);

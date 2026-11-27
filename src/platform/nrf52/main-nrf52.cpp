@@ -1,37 +1,24 @@
 #include "UptimeClock.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh/Throttle.h"
-#ifndef ARCH_NRF54L
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
-#endif
 #include <InternalFileSystem.h>
 #include <SPI.h>
 #include <Wire.h>
 
 #define APP_WATCHDOG_SECS 90
-#ifdef ARCH_NRF54L
-// The nRF54L core compiles the nrfx drivers itself (nrfx 3: errno-style returns, 0 is success);
-// POWER/RESET registers are split differently.
-#include <nRF54Crypto.h>
-#include <nrfx_wdt.h>
-#define NRFX_OK 0
-#define GPREGRET_REG NRF_POWER->GPREGRET[0]
-#define RESETREAS_REG NRF_RESET->RESETREAS
-#else
 #define NRFX_WDT_ENABLED 1
 #define NRFX_WDT0_ENABLED 1
 #define NRFX_WDT_CONFIG_NO_IRQ 1
 #include "nrfx_power.h"
-#include <nrfx_wdt.c>
-#include <nrfx_wdt.h>
-#define GPREGRET_REG NRF_POWER->GPREGRET
-#define RESETREAS_REG NRF_POWER->RESETREAS
-#define NRFX_OK NRFX_SUCCESS
-#endif
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
+#include <nrf_sdm.h>
+#include <nrfx_wdt.c>
+#include <nrfx_wdt.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
 #include "HardwareRNG.h"
@@ -44,7 +31,9 @@
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include "flash/flash_nrf5x.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -86,11 +75,7 @@ __attribute__((noinline)) bool variant_enableBatteryLpcompWake()
     return true;
 }
 
-#ifdef ARCH_NRF54L
-static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(NRF_WDT31);
-#else
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
-#endif
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
 // This is a public global so that the debugger can set it to false automatically from our gdbinit
@@ -108,11 +93,7 @@ static inline void debugger_break(void)
 // PowerHAL NRF52 specific function implementations
 bool powerHAL_isVBUSConnected()
 {
-#ifdef ARCH_NRF54L
-    return false; // no USB peripheral
-#else
     return NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
-#endif
 }
 
 bool powerHAL_isPowerLevelSafe()
@@ -161,10 +142,8 @@ void powerHAL_platformInit()
     // I did experiments with bench power supply and no matter what is set to POFCON, it always triggers right below
     // 2.8V. I compared raw registry values with datasheet.
 
-#ifndef ARCH_NRF54L
     NRF_POWER->POFCON =
         ((POWER_POFCON_THRESHOLD_V22 << POWER_POFCON_THRESHOLD_Pos) | (POWER_POFCON_POF_Enabled << POWER_POFCON_POF_Pos));
-#endif
 
     // remember to always match VBAT_AR_INTERNAL with AREF_VALUE in variant definition file
 #ifdef VBAT_AR_INTERNAL
@@ -204,14 +183,70 @@ bool loopCanSleep()
     // return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
+// TinyUSB's flush only queues the next USB packet, so a reset straight after it drops the rest of the CDC FIFO.
+// Wait, bounded, for the FIFO to drain. Skipped where the USB task can't run (ISR, scheduler stopped).
+static void drainConsoleBeforeReset()
+{
+    Serial.flush();
+#ifdef USE_TINYUSB
+    // wio-sdk-wm1110 unflags USE_TINYUSB for its CH340, so the tud_cdc API is absent there.
+    if (__get_IPSR() != 0 || xTaskGetSchedulerState() != taskSCHEDULER_RUNNING || !tud_cdc_connected())
+        return;
+    for (uint32_t waitedMs = 0; waitedMs < 250 && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE; waitedMs++) {
+        tud_cdc_write_flush();
+        delay(1);
+    }
+    // An empty FIFO means the last packet reached the endpoint buffer, not the host; it's collected on the next 1 ms frame
+    delay(20);
+#endif
+}
+
+// What file:line can't say: the task that asserted (the log's [thread] tag is the last OSThread to run), how close
+// its stack came to overflowing, and whether the heap was exhausted, fragmented or corrupt.
+static void logAssertContext()
+{
+    if (__get_IPSR() != 0) {
+        LOG_ERROR("assert context: exception %lu", (unsigned long)__get_IPSR());
+        return;
+    }
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
+        return;
+    const char *task = pcTaskGetName(NULL);
+    const unsigned stackFree = uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t);
+    // mallinfo() behind getFreeHeap() walks the same list unchecked, so only call it once the list checks out
+    if (!memGet.heapLooksIntact()) {
+        LOG_ERROR("assert context: task %s, stack free %u B, heap free list corrupt", task, stackFree);
+        return;
+    }
+    LOG_ERROR("assert context: task %s, stack free %u B, heap free %u, largest block %u", task, stackFree, memGet.getFreeHeap(),
+              memGet.getMaxAllocHeap());
+}
+
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
+    // An assert raised while logging this one (an allocation failing inside the log) resets rather than recursing;
+    // the drain neither logs nor allocates, so the lines already written still reach the host
+    static bool asserting = false;
+    if (asserting) {
+        drainConsoleBeforeReset();
+        NVIC_SystemReset();
+    }
+    asserting = true;
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    Serial.flush(); // the reset below would cut the message short
+    logAssertContext();
+    drainConsoleBeforeReset();
     // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
+}
+
+// Bluefruit LESC pairing only uses secp256r1. Replacing the cc310 lookup keeps the parameter
+// tables of its ten other curves (~7.4 KB) from being linked through ecDomainsFuncP.
+extern "C" const CRYS_ECPKI_Domain_t *SaSi_ECPKI_GetSecp256r1DomainP(void);
+extern "C" const CRYS_ECPKI_Domain_t *CRYS_ECPKI_GetEcDomain(CRYS_ECPKI_DomainID_t domainId)
+{
+    return domainId == CRYS_ECPKI_DomainID_secp256r1 ? SaSi_ECPKI_GetSecp256r1DomainP() : nullptr;
 }
 
 void getMacAddr(uint8_t *dmac)
@@ -225,15 +260,25 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    uint8_t sdEnabled = 0;
+    ble_gap_addr_t gapAddr;
+    if (sd_softdevice_is_enabled(&sdEnabled) == NRF_SUCCESS && sdEnabled && sd_ble_gap_addr_get(&gapAddr) == NRF_SUCCESS) {
+        for (size_t i = 0; i < BLE_GAP_ADDR_LEN; i++)
+            addr[i] = gapAddr.addr[BLE_GAP_ADDR_LEN - 1 - i]; // the SoftDevice stores it least significant byte first
+        return true;
+    }
+    // SoftDevice not running: it would advertise on its default identity address, the FICR one getMacAddr() reads.
+    getMacAddr(addr);
+    return true;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     // Nordic burns a FIPS-compliant random id into each chip at the factory. We concatenate
     // the device address to that random id to form the 16-byte hardware identifier.
-#ifdef ARCH_NRF54L
-    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
-#else
     uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
-#endif
     uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
     memcpy(deviceId, &device_id_start, sizeof(device_id_start));
     memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
@@ -324,9 +369,9 @@ void preFSBegin()
 {
     // The GPREGRET register keeps its value across warm boots. Check that this is a warm boot and, if GPREGRET
     // is set to NRF52_MAGIC_LFS_IS_CORRUPT, format LittleFS.
-    if (!(RESETREAS_REG == 0 && GPREGRET_REG == NRF52_MAGIC_LFS_IS_CORRUPT))
+    if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
-    GPREGRET_REG = 0;
+    NRF_POWER->GPREGRET = 0;
     // unset-sentinel-ok: formatted_this_boot carries the armed state, so 0 is a legal stamp
     last_format_ms = Time::getMillis();
     formatted_this_boot = true;
@@ -364,7 +409,7 @@ extern "C" void lfs_assert(const char *reason)
     if (!NRF_POWER->EVENTS_POFWARN) {
         if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS &&
               sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
-            GPREGRET_REG = NRF52_MAGIC_LFS_IS_CORRUPT;
+            NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
         }
     }
 
@@ -391,16 +436,6 @@ void checkSDEvents()
             case NRF_EVT_FLASH_OPERATION_ERROR:
                 flash_nrf5x_event_cb(evt);
                 break;
-#ifdef ARCH_NRF54L
-            case NRF_EVT_RAND_SEED_REQUEST: {
-                uint8_t seed[SD_RAND_SEED_SIZE];
-                nRF54Crypto.begin();
-                if (nRF54Crypto.random(seed, sizeof(seed)))
-                    sd_rand_seed_set(seed);
-                nRF54Crypto.end();
-                break;
-            }
-#endif
 
             default:
                 LOG_DEBUG("Unexpected SDevt %d", evt);
@@ -459,6 +494,9 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#if GPS_PPS_DISCIPLINE
+    Time::startMicrosClock(); // RTC2: the PPS edge to 30.5 µs instead of 1 ms
+#endif
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif
@@ -500,11 +538,6 @@ void nrf52Setup()
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
-#ifdef ARCH_NRF54L
-    // nrfx 3: behaviour is a RUN_* mask (0 = pause in sleep and halt), init takes a context argument
-    nrfx_wdt_config_t wdt0_config = {.behaviour = 0, .reload_value = APP_WATCHDOG_SECS * 1000};
-    int r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config, nullptr, nullptr);
-#else
     nrfx_wdt_config_t wdt0_config = {
         .behaviour = NRF_WDT_BEHAVIOUR_PAUSE_SLEEP_HALT, .reload_value = APP_WATCHDOG_SECS * 1000,
         // Note: Not using wdt interrupts.
@@ -513,11 +546,19 @@ void nrf52Setup()
     nrfx_err_t r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config,
                                  nullptr // Watchdog event handler, not used, we just reset.
     );
-#endif
-    assert(r == NRFX_OK);
+    assert(r == NRFX_SUCCESS);
 
     r = nrfx_wdt_channel_alloc(&nrfx_wdt, &nrfx_wdt_channel_id_nrf52_main);
-    assert(r == NRFX_OK);
+    assert(r == NRFX_SUCCESS);
+}
+
+// Waits out any flash write another task has in flight, drains the shared page cache, and keeps
+// both locks: the caller resets next, and a reset mid-program tears the page.
+void nrf52FlashQuiesce()
+{
+    spiLock->lock();
+    InternalFS._lockFS();
+    flash_nrf5x_flush();
 }
 
 void cpuDeepSleep(uint32_t msecToWake)
@@ -534,8 +575,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial)       // Another check in case of disabled default serial, does nothing bad
         Serial.end(); // This may cause crashes as debug messages continue to flow.
 
-        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
-        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
+    // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+    // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
@@ -554,6 +595,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // Run shutdown code if specified in variant.cpp
     variant_shutdown();
+
+    nrf52FlashQuiesce();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -595,16 +638,11 @@ void cpuDeepSleep(uint32_t msecToWake)
         }
 #endif
 
-#ifdef ARCH_NRF54L
-        // s145 has no sd_power_system_off(); REGULATORS is not SoftDevice-restricted
-        NRF_REGULATORS->SYSTEMOFF = 1;
-#else
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off");
             NRF_POWER->SYSTEMOFF = 1;
         }
-#endif
     }
 
     // The following code should not be run, because we are off
@@ -625,6 +663,7 @@ void clearBonds()
 
 void enterDfuMode()
 {
+    nrf52FlashQuiesce();
 // SDK kit does not have native USB like almost all other NRF52 boards
 #ifdef NRF_USE_SERIAL_DFU
     enterSerialDfu();

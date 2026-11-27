@@ -215,8 +215,8 @@ class AirTime : private concurrency::OSThread
         /// channelUtilizationPercent(), which would re-enter syncNow().
         float channelUtilizationPercentRaw(const Held &);
         float smoothedChannelUtilizationPercent(const Held &);
-        /// Fold `steps` readings of `sample` into channelUtilAvg. Closed form, not a loop, so a
-        /// multi-day sleep decays by the time elapsed at the cost of one powf.
+        /// Fold `steps` readings of `sample` into channelUtilAvg. Power by squaring, so a
+        /// multi-day sleep decays by the time elapsed in at most 32 multiplications.
         void foldChannelUtil(float sample, uint32_t steps, const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);

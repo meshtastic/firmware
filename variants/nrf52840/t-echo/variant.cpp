@@ -51,4 +51,17 @@ void variant_shutdown()
     pinMode(PIN_EINK_DC, INPUT);
     pinMode(PIN_EINK_RES, INPUT);
     pinMode(PIN_EINK_BUSY, INPUT);
+
+    // InputBroker gives every button INPUT_PULLUP_SENSE, and that SENSE bit keeps driving DETECT
+    // once we are in System OFF. On a mechanical button that is what you want -- it is how you
+    // switch the node back on. The touch pad is capacitive, though, so a damp pad or the touch IC's
+    // output drifting low on an unpowered rail asserts DETECT with nobody touching anything, and
+    // the node powers straight back up after a shutdown. Confirmed on hardware: P0.11 shows up in
+    // the GPIO LATCH register on the wake-up boot.
+    //
+    // INPUT_PULLUP is the same pin config minus SENSE -- still held high, still no leakage, but no
+    // longer a wake source. Both physical buttons keep theirs: PIN_BUTTON1 (P1.10, "Button 2" on
+    // LilyGo's diagram) and PIN_BUTTON2 (P0.18, the RESET-silkscreened pad the docs call "Button 1"
+    // and describe as "Short press: Power on or reboot").
+    pinMode(PIN_BUTTON_TOUCH, INPUT_PULLUP);
 }

@@ -1,0 +1,6 @@
+# FAULT: HTTPPort without Port. The plain listener is started by the TLS web server thread,
+# which only exists when Port is set, so nothing listens. Expect one warning.
+Lora:
+  Module: sx1262
+Webserver:
+  HTTPPort: 9080

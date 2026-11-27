@@ -37,10 +37,17 @@
 #include <esp_err.h>
 #endif
 
+#if defined(USB_HOST_PWR_DETECT) && defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+#include "HWCDC.h"
+#endif
+
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #endif
 
 #ifdef HAS_ADS1115
@@ -198,6 +205,12 @@ static bool initAdcCalibration()
 #endif
 #endif
 
+#ifdef USB_HOST_PWR_DETECT
+#if !defined(ARDUINO_USB_CDC_ON_BOOT) || !ARDUINO_USB_CDC_ON_BOOT
+#error "USB_HOST_PWR_DETECT needs the native USB port: build with ARDUINO_USB_CDC_ON_BOOT=1"
+#endif
+#endif
+
 #ifdef EXT_CHRG_DETECT
 #ifndef EXT_CHRG_DETECT_MODE
 #define EXT_CHRG_DETECT_MODE INPUT
@@ -250,6 +263,9 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// MAX17048 is I2C-only; keep the symbol declared in Power.h defined as a stub
+NullSensor max17048Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
@@ -314,6 +330,8 @@ using namespace meshtastic;
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
 #ifdef BATTERY_PIN
+
+static_assert(BATTERY_PIN >= 0, "BATTERY_PIN must be a real ADC pin; leave it undefined when the board has no battery sense");
 
 void battery_adcEnable()
 {
@@ -440,6 +458,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // Override variant or default ADC_MULTIPLIER if we have the override pref
         float operativeAdcMultiplier =
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
+        // The filter below holds a value scaled with the previous multiplier, so a runtime
+        // change would otherwise need ~1 min of convergence to show up. Rescale instead.
+        if (last_adc_multiplier != operativeAdcMultiplier) {
+            if (last_adc_multiplier > 0)
+                last_read_value *= operativeAdcMultiplier / last_adc_multiplier;
+            last_adc_multiplier = operativeAdcMultiplier;
+        }
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
@@ -570,7 +595,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_PWR_DETECT
         if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
             return true;
-#ifdef EXT_CHRG_DETECT
+#if defined(EXT_CHRG_DETECT) && !defined(EXT_CHRG_DETECT_IS_SOLAR)
         // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
         // pin that only asserts once the battery is full) - CHRG being active implies
         // power is present regardless.
@@ -582,8 +607,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8) || defined(M5STACK_SOLAR_NODE)
         return powerHAL_isVBUSConnected();
+#elif defined(USB_HOST_PWR_DETECT)
+        // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame
+        // packets, which means it sees a USB *host*: a wall charger or power bank supplies VBUS but
+        // sends no SOF and reads as unplugged. Boards that must spot dumb chargers need a real
+        // EXT_PWR_DETECT pin.
+        return HWCDC::isPlugged();
 #endif
         return getBattVoltage() > chargingVolt;
     }
@@ -592,6 +623,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
+#ifdef BATTERY_NOT_RECHARGEABLE
+        // Primary cells with no charger on board: external power is never charging the pack, so
+        // report false and let the UI draw the plain USB icon instead of a charging bolt.
+        return false;
+#else
 #ifdef HAS_SGM41562
         if (sgm41562 && sgm41562->refresh())
             return sgm41562->isCharging();
@@ -630,6 +666,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
         // by default, we check the battery voltage only
         return isVbusIn();
+#endif // BATTERY_NOT_RECHARGEABLE
     }
 
   private:
@@ -648,6 +685,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+    float last_adc_multiplier = 0;
 #ifdef ARCH_STM32
     // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
     // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
@@ -872,13 +910,6 @@ Power::Power() : OSThread("Power")
 
 bool Power::analogInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
@@ -927,7 +958,14 @@ bool Power::analogInit()
     batteryLevel = &analogLevel;
     return true;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // No ADC pin: AnalogBatteryLevel still reads a configured INA (power.device_battery_ina_address), and with
+    // none it reports no battery, so the board keeps its 101% external-power status.
+    batteryLevel = &analogLevel;
+    return true;
+#else
     return false;
+#endif
 #endif
 }
 
@@ -938,6 +976,13 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+    // Before the gauge probes: a gauge that keeps AnalogBatteryLevel::isVbusIn() still reads these pins
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
+#endif
 #ifdef HAS_SGM41562
     // Initialize the charger early so AnalogBatteryLevel can read charging
     // state from it. The charger does not provide battery voltage / percent -
@@ -1013,6 +1058,7 @@ void Power::reboot()
 #if defined(ARCH_ESP32)
     ESP.restart();
 #elif defined(ARCH_NRF52)
+    nrf52FlashQuiesce();
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
@@ -1092,6 +1138,15 @@ void Power::shutdown()
 #endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
+#if HAS_HOST_POWEROFF
+    // A portduino node is a process on a computer that outlives it, so exiting here only ends the
+    // daemon - and under Restart=always systemd brings it straight back. When the user asked for
+    // the host itself, hand off to logind. Everything above has already run, so the NodeDB and
+    // message store are on disk either way. Fall through to exit() if logind refuses, rather than
+    // leaving the node sitting there having said it was shutting down.
+    if (hostPowerOffRequested)
+        linuxPowerOffHost();
+#endif
     exit(EXIT_SUCCESS);
 #else
     LOG_WARN("FIXME implement shutdown for this platform");
@@ -1283,8 +1338,10 @@ void Power::logHeapUsage()
     char detail[64] = "";
     const uint32_t minFree = memGet.getMinFreeHeap();
     const uint32_t maxAlloc = memGet.getMaxAllocHeap();
-    if (minFree || maxAlloc)
+    if (minFree)
         snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+    else if (maxAlloc)
+        snprintf(detail, sizeof(detail), ", largest block %u", maxAlloc);
 
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
@@ -1885,6 +1942,10 @@ bool Power::max17048Init()
 
 #if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
 
+#ifndef CW2015_FULL_SOC
+#define CW2015_FULL_SOC 100 // gauge SOC that counts as full; boards whose charger tops out lower set their own
+#endif
+
 class CW2015BatteryLevel : public AnalogBatteryLevel
 {
   public:
@@ -1898,7 +1959,7 @@ class CW2015BatteryLevel : public AnalogBatteryLevel
         Wire.write(0x04);
         if (Wire.endTransmission() == 0) {
             if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
-                data = Wire.read();
+                data = clamp(Wire.read() * 100 / CW2015_FULL_SOC, 0, 100);
             }
         }
         return data;
@@ -2098,7 +2159,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
@@ -2335,13 +2396,6 @@ SerialBatteryLevel serialBatteryLevel;
  */
 bool Power::serialBatteryInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
     bool result = serialBatteryLevel.runOnce();
     LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)

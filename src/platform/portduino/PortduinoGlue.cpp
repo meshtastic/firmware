@@ -9,15 +9,24 @@
 #include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
+#include "UptimeClock.h"
 #include "api/ServerAPI.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
+#include <algorithm>
+#include <array>
 #include <assert.h>
 #include <cctype>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -28,11 +37,29 @@
 // for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
 #include <sys/ioctl.h>
 #endif
+#if !defined(_WIN32) && !defined(ARCH_PORTDUINO_WASM)
+// execCommand(): spawn a shell with a deadline and kill its process group on timeout.
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+#endif
+
+#include "LinuxBluetooth.h"
+#ifdef MESHTASTIC_LINUX_BLE
+#include "mesh/NodeDB.h"               // config.bluetooth.enabled
+extern LinuxBluetooth *linuxBluetooth; // defined in main.cpp
 #endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
@@ -60,6 +87,7 @@ bool portduinoWindowsPrimaryMac(uint8_t *dmac);
 
 portduino_config_struct portduino_config;
 portduino_status_struct portduino_status;
+
 std::ofstream traceFile;
 std::ofstream JSONFile;
 std::unique_ptr<Ch341Hal> ch341Hal;
@@ -71,14 +99,131 @@ bool configCheck = false;
 // Every config file we attempted to load, in load order, for --check to report on.
 std::vector<std::string> attemptedConfigFiles;
 
+// ---------------------------------------------------------------------------
+// RF switch table: chip-neutral storage, per-part translation
+// ---------------------------------------------------------------------------
+
+const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT] = {
+    {"MODE_STBY", RFSW_STBY},   {"MODE_RX", RFSW_RX},       {"MODE_TX", RFSW_TX},     {"MODE_TX_HP", RFSW_TX_HP},
+    {"MODE_TX_HF", RFSW_TX_HF}, {"MODE_RX_HF", RFSW_RX_HF}, {"MODE_GNSS", RFSW_GNSS}, {"MODE_WIFI", RFSW_WIFI},
+};
+
+const int8_t kLr11x0SwitchDios[5] = {5, 6, 7, 8, 10};
+const int8_t kLr20x0SwitchDios[7] = {5, 6, 7, 8, 9, 10, 11};
+
+const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count)
+{
+    switch (module) {
+    case use_lr1110:
+    case use_lr1120:
+    case use_lr1121:
+        *count = sizeof(kLr11x0SwitchDios) / sizeof(kLr11x0SwitchDios[0]);
+        return kLr11x0SwitchDios;
+    case use_lr2021:
+        *count = sizeof(kLr20x0SwitchDios) / sizeof(kLr20x0SwitchDios[0]);
+        return kLr20x0SwitchDios;
+    default:
+        *count = 0;
+        return nullptr;
+    }
+}
+
+bool moduleUsesRfSwitchTable(lora_module_enum module)
+{
+    size_t count = 0;
+    return rfSwitchDiosFor(module, &count) != nullptr;
+}
+
+size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
+                          const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap)
+{
+    for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++)
+        pins[i] = RADIOLIB_NC;
+
+    // A DIO this part cannot use leaves the slot at RADIOLIB_NC, so mode rows still line up.
+    uint8_t usableSlots = 0;
+    for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++) {
+        const int8_t dio = portduino_config.rfswitch_dio_num[i];
+        if (dio < 0)
+            continue;
+        for (size_t s = 0; s < dioCount; s++) {
+            if (dioNumbers[s] == dio) {
+                pins[i] = pinConsts[s];
+                usableSlots |= (uint8_t)(1u << i);
+                break;
+            }
+        }
+    }
+
+    size_t rows = 0;
+    for (int m = 0; m < RFSW_MODE_COUNT && rows + 1 < tableCapacity; m++) {
+        if (modeMap[m] == RFSW_MODE_UNSUPPORTED)
+            continue;
+        table[rows].mode = (uint32_t)modeMap[m];
+        const uint8_t high = (uint8_t)(portduino_config.rfswitch_mode_high[m] & usableSlots);
+        for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++)
+            table[rows].values[i] = (high & (1u << i)) ? HIGH : LOW;
+        rows++;
+    }
+    if (rows < tableCapacity)
+        table[rows++] = END_OF_MODE_TABLE;
+    return rows;
+}
+
 const char *argp_program_version = optstr(APP_VERSION);
 
 char stdoutBuffer[512];
 
+#ifdef MESHTASTIC_LINUX_BLE
+// Long enough that a host which can never bring BLE up is not re-probing BlueZ on every PowerFSM
+// transition, short enough that a bluetoothd still starting at boot is picked up without the user
+// noticing the wait.
+static constexpr uint32_t BLE_SETUP_RETRY_INTERVAL_MS = 30 * 1000;
+#endif
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+#ifdef MESHTASTIC_LINUX_BLE
+    // Disable is not gated on the config flags: if BLE is running it must always be
+    // stoppable, even after the device config was switched off underneath it.
+    if (!enable) {
+        if (linuxBluetooth) {
+            // Stop advertising only; a live phone connection survives PowerFSM state
+            // dips.
+            linuxBluetooth->shutdown();
+        }
+        return;
+    }
+    // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
+    // host, and the regular device config (like every other platform) must have
+    // Bluetooth on.
+    if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
+        return;
+    static uint32_t lastSetupMs = 0; // 0 = not attempted yet; stored through stampMillis()
+    if (!linuxBluetooth) {
+        LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth = new LinuxBluetooth();
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else if (!linuxBluetooth->isEnabled()) {
+        // The backend exists but never came up -- bluetoothd was not ready, the adapter was
+        // missing, or policy refused us. resumeAdvertising() returns immediately while disabled, so
+        // without this a transient failure at boot would keep BLE off until the process restarted.
+        //
+        // Throttled because five PowerFSM state-entry handlers reach here, and each setup() opens a
+        // system bus connection, spawns an event-loop thread and enumerates every BlueZ object
+        // before giving up. On a host where BLE can never come up that cost, and the log line, would
+        // otherwise repeat on every transition for as long as the daemon runs.
+        if (lastSetupMs && !Throttle::hasElapsed(lastSetupMs, BLE_SETUP_RETRY_INTERVAL_MS))
+            return;
+        LOG_INFO("Retry LinuxBluetooth setup (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else {
+        linuxBluetooth->resumeAdvertising();
+    }
+#endif
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -221,9 +366,23 @@ void getMacAddr(uint8_t *dmac)
         return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
+        // Cache after the first successful read. The adapter address can't change at
+        // runtime, this now gets called from BLE property getters on every bluetoothd
+        // read (not just at startup), and the socket used to leak one fd per call.
+        static uint8_t cachedMac[6];
+        static bool macCached = false;
+        if (macCached) {
+            memcpy(dmac, cachedMac, 6);
+            return;
+        }
         struct hci_dev_info di = {0};
-        di.dev_id = 0;
-        bdaddr_t bdaddr;
+        // Read the adapter configured for BLE (Bluetooth.AdapterId) so the node
+        // identity matches the advertised adapter; a name that doesn't parse as
+        // hci<N> falls back to hci0, preserving the pre-BLE behavior.
+        unsigned adapterIndex = 0;
+        if (sscanf(portduino_config.bluetooth_adapter.c_str(), "hci%u", &adapterIndex) != 1)
+            adapterIndex = 0;
+        di.dev_id = adapterIndex;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -231,8 +390,10 @@ void getMacAddr(uint8_t *dmac)
         }
 
         if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            close(btsock);
             return;
         }
+        close(btsock);
 
         dmac[0] = di.bdaddr.b[5];
         dmac[1] = di.bdaddr.b[4];
@@ -240,6 +401,8 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+        memcpy(cachedMac, dmac, 6);
+        macCached = true;
 #elif defined(__APPLE__)
         // No BlueZ on macOS, but we can fall back to the host's primary
         // network interface MAC. `en0` is Wi-Fi on every shipping Mac
@@ -276,6 +439,11 @@ void getMacAddr(uint8_t *dmac)
         (void)dmac;
 #endif
     }
+}
+
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
 }
 
 bool getDeviceId(uint8_t *deviceId)
@@ -728,12 +896,15 @@ void portduinoSetup()
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
+    // A ch341 adapter drives its Lora pins over USB, and a transparent radio has none here: leave those lines alone.
+    const bool loraPinsUnused = portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_module == use_transparent;
+
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
     for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i->config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i->enabled) {
@@ -752,7 +923,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled) {
@@ -769,7 +940,7 @@ void portduinoSetup()
     }
 
     // In one test, this dance seemed necessary to trigger the pin to detect properly.
-    if (portduino_config.lora_pa_detect_pin.enabled) {
+    if (portduino_config.lora_pa_detect_pin.enabled && portduino_config.lora_module != use_transparent) {
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
         sleep(1);
         if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
@@ -799,7 +970,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled && i.default_high) {
@@ -949,6 +1120,8 @@ bool loadConfig(const char *configPath)
                     exit(EXIT_FAILURE);
                 }
             }
+            if (yamlConfig["Lora"]["TransparentDevice"])
+                portduino_config.lora_transparent_device = yamlConfig["Lora"]["TransparentDevice"].as<std::string>("");
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
                 portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["SX128X_MAX_POWER"])
@@ -978,12 +1151,19 @@ bool loadConfig(const char *configPath)
             }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
-                !portduino_config.force_simradio) {
+                portduino_config.lora_module != use_transparent && !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
                 portduino_config.dio3_tcxo_voltage = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
                     portduino_config.dio3_tcxo_voltage = 1800; // default millivolts for "true"
                 }
+                // A written-out false or 0 asks for DIO3 to be left alone, which stores the same as
+                // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
+                portduino_config.dio3_tcxo_voltage_disabled =
+                    yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                portduino_config.dio3_tcxo_delay_us = yamlConfig["Lora"]["DIO3_TCXO_DELAY_US"].as<int>(0);
+                // Try both oscillators rather than requiring the user to know which is fitted.
+                portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
                 // backwards API compatibility and to globally set gpiochip once
                 portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
@@ -1006,65 +1186,104 @@ bool loadConfig(const char *configPath)
             }
 
             portduino_config.spiSpeed = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            if (yamlConfig["Lora"]["IgnoreRelayNodes"]) {
+                const YAML::Node relayNodes = yamlConfig["Lora"]["IgnoreRelayNodes"];
+                if (!relayNodes.IsSequence()) {
+                    std::cout << "Lora.IgnoreRelayNodes must be a list of node numbers!" << std::endl;
+                    if (!configCheck)
+                        exit(EXIT_FAILURE);
+                } else {
+                    for (const auto &entry : relayNodes) {
+                        uint32_t node = 0;
+                        if (!nodeNumberFromYaml(entry, node)) {
+                            const std::string written = entry.Scalar().empty() ? entry.Tag() : entry.Scalar();
+                            std::cout << "Lora.IgnoreRelayNodes: '" << written << "' is not a node number!" << std::endl;
+                            if (!configCheck)
+                                exit(EXIT_FAILURE);
+                            continue;
+                        }
+                        if (std::find(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                                      node) == portduino_config.ignore_relay_nodes.end())
+                            portduino_config.ignore_relay_nodes.push_back(node);
+                    }
+                }
+            }
             portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
             portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (portduino_config.lora_spi_dev != "ch341") {
-                portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
-                if (portduino_config.lora_spi_dev.length() == 14) {
-                    int x = portduino_config.lora_spi_dev.at(11) - '0';
-                    int y = portduino_config.lora_spi_dev.at(13) - '0';
-                    // Pretty sure this is always true
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        // I believe this bit of weirdness is specifically for the new GUI
-                        portduino_config.lora_spi_dev_int = x + y << 4;
-                        portduino_config.display_spi_dev_int = portduino_config.lora_spi_dev_int;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.lora_spi_dev_int;
+            if (portduino_config.lora_module == use_transparent) {
+                portduino_config.lora_spi_dev = ""; // the radio is on the other node, so leave the SPI bus alone
+            } else if (portduino_config.lora_spi_dev != "ch341") {
+                if (portduino_config.lora_spi_dev.rfind("/dev/", 0) != 0)
+                    portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
+                const int host = spiHostFromDevicePath(portduino_config.lora_spi_dev);
+                if (host >= 0) {
+                    portduino_config.lora_spi_dev_int = host;
+                    // Let a display/touchscreen from an earlier config file keep its own bus.
+                    // The touchscreen follows the display when it has no spidev of its own.
+                    if (portduino_config.display_spi_dev.empty()) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
                     }
+                } else {
+                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
+                             portduino_config.lora_spi_dev.c_str());
                 }
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
                 portduino_config.has_rfswitch_table = true;
-                portduino_config.rfswitch_table[0].mode = LR11x0::MODE_STBY;
-                portduino_config.rfswitch_table[1].mode = LR11x0::MODE_RX;
-                portduino_config.rfswitch_table[2].mode = LR11x0::MODE_TX;
-                portduino_config.rfswitch_table[3].mode = LR11x0::MODE_TX_HP;
-                portduino_config.rfswitch_table[4].mode = LR11x0::MODE_TX_HF;
-                portduino_config.rfswitch_table[5].mode = LR11x0::MODE_GNSS;
-                portduino_config.rfswitch_table[6].mode = LR11x0::MODE_WIFI;
-                portduino_config.rfswitch_table[7] = END_OF_MODE_TABLE;
+                // A later file's table fully replaces an earlier one, matching "last file wins"
+                // for every other Lora: key, rather than leaving omitted pins/modes as carryover.
+                for (int i = 0; i < 5; i++)
+                    portduino_config.rfswitch_dio_num[i] = -1;
+                for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                    portduino_config.rfswitch_mode_present[m] = false;
+                    portduino_config.rfswitch_mode_high[m] = 0;
+                }
+                const YAML::Node table = yamlConfig["Lora"]["rfswitch_table"];
 
+                // Store the DIO number as written; the slot it maps to is per-radio. Anything
+                // not spelled exactly "DIO<n>" (trailing junk included) leaves the slot unused.
                 for (int i = 0; i < 5; i++) {
+                    const std::string name = table["pins"][i].as<std::string>("");
+                    int dioNum = 0;
+                    if (sscanf(name.c_str(), "DIO%d", &dioNum) == 1 && dioNum >= 0 && dioNum <= INT8_MAX &&
+                        name == "DIO" + std::to_string(dioNum))
+                        portduino_config.rfswitch_dio_num[i] = (int8_t)dioNum;
+                }
 
-                    // set up the pin array first
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO5")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO5;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO6")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO6;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO7")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO7;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO8")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO8;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO10")
-                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO10;
-
-                    // now fill in the table
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_STBY"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[0].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[1].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[2].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[3].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[4].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[5].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_WIFI"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[6].values[i] = HIGH;
+                for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                    const YAML::Node row = table[kRfSwitchModeNames[m].name];
+                    if (!row)
+                        continue;
+                    portduino_config.rfswitch_mode_present[m] = true;
+                    // Fresh mask per row, not OR'd onto whatever was there - a re-parse must be able
+                    // to clear a slot back to LOW, not just add HIGH bits.
+                    uint8_t high = 0;
+                    for (int i = 0; i < 5; i++)
+                        if (row[i].as<std::string>("") == "HIGH")
+                            high |= (uint8_t)(1u << i);
+                    portduino_config.rfswitch_mode_high[m] = high;
+                }
+            }
+            // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5. LR2021_IRQ_DIO_NUM
+            // is the older spelling, read only when the generic key is absent.
+            const char *irqDioKey = yamlConfig["Lora"]["IRQ_DIO_NUM"]
+                                        ? "IRQ_DIO_NUM"
+                                        : (yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"] ? "LR2021_IRQ_DIO_NUM" : nullptr);
+            if (irqDioKey) {
+                const int irqDio = yamlConfig["Lora"][irqDioKey].as<int>(-1);
+                if (irqDio >= kLr20x0IrqDioMin && irqDio <= kLr20x0IrqDioMax)
+                    portduino_config.irq_dio_num = irqDio;
+                else {
+                    // Back to unset, or a valid value from an earlier config.d file would survive the
+                    // warning and be used in place of the default it promises.
+                    portduino_config.irq_dio_num = -1;
+                    LOG_WARN("Lora.%s is %d, outside DIO%d-DIO%d; ignoring it and using the radio default", irqDioKey, irqDio,
+                             kLr20x0IrqDioMin, kLr20x0IrqDioMax);
                 }
             }
         }
@@ -1090,6 +1309,10 @@ bool loadConfig(const char *configPath)
                     portduino_config.has_gps = 1;
                 }
             }
+        }
+        // Only a file that names Path changes it, so a later config.d file cannot clear it by omission.
+        if (yamlConfig["SerialModule"] && yamlConfig["SerialModule"]["Path"]) {
+            portduino_config.serial_module_path = yamlConfig["SerialModule"]["Path"].as<std::string>("");
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
@@ -1128,13 +1351,17 @@ bool loadConfig(const char *configPath)
             portduino_config.displayInvert = yamlConfig["Display"]["Invert"].as<bool>(false);
             portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
-                portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
-                if (portduino_config.display_spi_dev.length() == 14) {
-                    int x = portduino_config.display_spi_dev.at(11) - '0';
-                    int y = portduino_config.display_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.display_spi_dev_int = x + y << 4;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
+                portduino_config.display_spi_dev = yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (!portduino_config.display_spi_dev.empty()) {
+                    if (portduino_config.display_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.display_spi_dev = "/dev/" + portduino_config.display_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.display_spi_dev);
+                    if (host >= 0) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
+                    } else {
+                        LOG_WARN("Display.spidev \"%s\" is not a usable spidev path", portduino_config.display_spi_dev.c_str());
                     }
                 }
             }
@@ -1191,13 +1418,16 @@ bool loadConfig(const char *configPath)
             portduino_config.touchscreenRotate = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             portduino_config.touchscreenI2CAddr = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
-                portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
-                if (portduino_config.touchscreen_spi_dev.length() == 14) {
-                    int x = portduino_config.touchscreen_spi_dev.at(11) - '0';
-                    int y = portduino_config.touchscreen_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.touchscreen_spi_dev_int = x + y << 4;
-                    }
+                portduino_config.touchscreen_spi_dev = yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (!portduino_config.touchscreen_spi_dev.empty()) {
+                    if (portduino_config.touchscreen_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.touchscreen_spi_dev = "/dev/" + portduino_config.touchscreen_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.touchscreen_spi_dev);
+                    if (host >= 0)
+                        portduino_config.touchscreen_spi_dev_int = host;
+                    else
+                        LOG_WARN("Touchscreen.spidev \"%s\" is not a usable spidev path",
+                                 portduino_config.touchscreen_spi_dev.c_str());
                 }
             }
         }
@@ -1206,21 +1436,59 @@ bool loadConfig(const char *configPath)
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
             portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
             if (yamlConfig["Input"]["JoystickButtons"]) {
-                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
-                // as code -> lowercase action name for the driver to look up per keypress.
+                // action name -> evdev button code (hex like 0x122 or decimal), or a list of codes
+                // so several physical buttons drive the same action. Stored inverted as
+                // code -> lowercase action name for the driver to look up per keypress.
                 for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
                     std::string action = button.first.as<std::string>("");
                     for (auto &c : action)
                         c = tolower(c);
-                    int code = 0;
-                    try {
-                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
-                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
-                    } catch (const std::exception &) {
-                        code = 0;
+                    if (action == "")
+                        continue;
+                    // A bare scalar is just a one-entry list.
+                    std::vector<YAML::Node> codeNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &codeNode : button.second)
+                            codeNodes.push_back(codeNode);
+                    else
+                        codeNodes.push_back(button.second);
+                    for (const auto &codeNode : codeNodes) {
+                        int code = 0;
+                        try {
+                            // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                            code = std::stoi(codeNode.as<std::string>(""), nullptr, 0);
+                        } catch (const std::exception &) {
+                            code = 0;
+                        }
+                        if (code != 0)
+                            portduino_config.joystickButtons[code] = action;
                     }
-                    if (code != 0 && action != "")
-                        portduino_config.joystickButtons[code] = action;
+                }
+            }
+
+            // Only when present, so a later config.d file with its own Input section keeps it.
+            if (yamlConfig["Input"]["ArcadeBonnet"])
+                portduino_config.arcadeBonnetAddress = yamlConfig["Input"]["ArcadeBonnet"].as<int>(0);
+            if (yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                // action name -> bonnet button name (1A..1F) or a list of them, stored inverted as
+                // expander bit -> lowercase action, like JoystickButtons.
+                for (const auto &button : yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    if (action == "")
+                        continue;
+                    std::vector<YAML::Node> pinNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &pinNode : button.second)
+                            pinNodes.push_back(pinNode);
+                    else
+                        pinNodes.push_back(button.second);
+                    for (const auto &pinNode : pinNodes) {
+                        const int bit = arcadeBonnetPinBit(pinNode.as<std::string>(""));
+                        if (bit >= 0)
+                            portduino_config.arcadeBonnetButtons[bit] = action;
+                    }
                 }
             }
 
@@ -1240,6 +1508,8 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             portduino_config.webserverport = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            portduino_config.webserver_http_port = (yamlConfig["Webserver"]["HTTPPort"]).as<int>(-1);
+            portduino_config.webserver_http_bind_all = (yamlConfig["Webserver"]["HTTPBindAll"]).as<bool>(false);
             portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
             portduino_config.webserver_ssl_key_path =
@@ -1248,11 +1518,97 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["Bluetooth"]) {
+            // Assign per key, not per section. loadConfig() runs once for every file in config.d, so
+            // reading an absent key as its default would let a later file that names only one of
+            // these silently reset the other -- `AdapterId: hci1` alone would turn Bluetooth off,
+            // and `Enabled: true` alone would drag the adapter back to hci0. Only what a file
+            // actually says should override what an earlier one set.
+            if (yamlConfig["Bluetooth"]["Enabled"])
+                portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            if (yamlConfig["Bluetooth"]["AdapterId"])
+                portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
+        }
+
         if (yamlConfig["HostMetrics"]) {
             portduino_config.hostMetrics_channel = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             portduino_config.hostMetrics_interval = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
+
+        // An empty `Sensors:` is null; skip it like any other empty section.
+        if (yamlConfig["Sensors"] && !yamlConfig["Sensors"].IsNull()) {
+            const YAML::Node sensors = yamlConfig["Sensors"];
+            if (!sensors.IsSequence()) {
+                std::cout << "Sensors must be a list of entries with a Type and a Command!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, like Security.AdminKeys, so each file in config.d can add its own sensors.
+                for (const auto &entry : sensors) {
+                    if (!entry.IsMap()) {
+                        std::cout << "Sensors: each entry needs a Type and a Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    const std::string type = entry["Type"].as<std::string>("");
+                    commandSensorConfig sensor;
+                    sensor.type = CommandSensorFields::canonicalType(type);
+                    sensor.command = entry["Command"].as<std::string>("");
+                    sensor.scale = entry["Scale"].as<float>(1.0f);
+                    if (!std::isfinite(sensor.scale))
+                        sensor.scale = 1.0f;
+                    if (sensor.type.empty() || sensor.command.empty()) {
+                        if (sensor.type.empty())
+                            std::cout << "Sensors: '" << type
+                                      << "' is not a known Type. Valid: " << CommandSensorFields::knownTypes() << std::endl;
+                        else
+                            std::cout << "Sensors: the " << sensor.type << " entry has no Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    portduino_config.command_sensors.push_back(sensor);
+                }
+            }
+        }
+
+        if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
+            const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
+            if (!keys.IsSequence()) {
+                std::cout << "Security.AdminKeys must be a list of base64 public keys!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, not assigned: loadConfig() runs once per file in config.d, so an
+                // operator can drop in a file per admin. Duplicates are dropped, since each key
+                // costs a trial decryption in Router's admin-key fallback.
+                for (const auto &entry : keys) {
+                    const std::string text = entry.as<std::string>("");
+                    std::array<uint8_t, 32> key;
+                    if (!adminKeyFromBase64(text, key)) {
+                        std::cout << "Security.AdminKeys: '" << text << "' is not a 32-byte base64 public key!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    if (std::find(portduino_config.admin_keys.begin(), portduino_config.admin_keys.end(), key) !=
+                        portduino_config.admin_keys.end())
+                        continue;
+                    if (portduino_config.admin_keys.size() >= PORTDUINO_MAX_ADMIN_KEYS) {
+                        std::cout << "Security.AdminKeys: at most " << PORTDUINO_MAX_ADMIN_KEYS
+                                  << " admin keys are supported, ignoring the rest!" << std::endl;
+                        break;
+                    }
+                    portduino_config.admin_keys.push_back(key);
+                }
+            }
+        }
+
+        // Only when the key is present, so a later file in config.d can turn it off again.
+        if (yamlConfig["Security"] && yamlConfig["Security"]["DMShell"])
+            portduino_config.dmshell_enabled = (yamlConfig["Security"]["DMShell"]).as<bool>(false);
 
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
@@ -1307,10 +1663,7 @@ bool loadConfig(const char *configPath)
                 std::getline(infile, portduino_config.mac_address);
             }
 
-            // https://stackoverflow.com/a/20326454
-            portduino_config.mac_address.erase(
-                std::remove(portduino_config.mac_address.begin(), portduino_config.mac_address.end(), ':'),
-                portduino_config.mac_address.end());
+            std::erase(portduino_config.mac_address, ':');
         }
     } catch (YAML::Exception &e) {
         // The check report repeats this against the file it came from, so printing it
@@ -1323,15 +1676,160 @@ bool loadConfig(const char *configPath)
 }
 #endif // !ARCH_PORTDUINO_WASM
 
+// Accepts `0xea618fb4` (yaml-cpp reads this as a number), `!a28e145b` (a local YAML tag on an empty
+// scalar), or decimal. Node number 0 is refused: its low byte would collide with NO_RELAY_NODE.
+#ifndef ARCH_PORTDUINO_WASM
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out)
+{
+    if (!node.IsScalar())
+        return false;
+
+    std::string text = node.Scalar();
+    bool hex = false;
+    // An unquoted `!xxxxxxxx` arrives as a tag with an empty scalar; a quoted one as a string.
+    if (text.empty() && node.Tag().size() > 1 && node.Tag()[0] == '!') {
+        text = node.Tag().substr(1);
+        hex = true;
+    } else if (!text.empty() && text[0] == '!') {
+        text = text.substr(1);
+        hex = true;
+    }
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+        text = text.substr(2);
+        hex = true;
+    }
+    if (text.empty() || text.size() > (hex ? 8 : 10))
+        return false;
+
+    uint64_t value = 0;
+    for (char c : text) {
+        int digit;
+        if (c >= '0' && c <= '9')
+            digit = c - '0';
+        else if (hex && c >= 'a' && c <= 'f')
+            digit = c - 'a' + 10;
+        else if (hex && c >= 'A' && c <= 'F')
+            digit = c - 'A' + 10;
+        else
+            return false;
+        value = value * (hex ? 16 : 10) + static_cast<uint64_t>(digit);
+    }
+    if (value == 0 || value > UINT32_MAX)
+        return false;
+    out = static_cast<uint32_t>(value);
+    return true;
+}
+#endif // !ARCH_PORTDUINO_WASM
+
 // https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static bool ends_with(std::string_view str, std::string_view suffix)
 {
     return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+static int base64Value(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+' || c == '-') // '-' and '_' so a base64url-encoded key is accepted too
+        return 62;
+    if (c == '/' || c == '_')
+        return 63;
+    return -1;
+}
+
+// Decodes a 32-byte public key as the apps and the CLI print it. Anything that is not exactly 32
+// bytes of canonical base64 is refused rather than zero-padded: a truncated admin key would
+// silently authorize the wrong peer.
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out)
+{
+    uint32_t accum = 0;
+    int bits = 0;
+    size_t written = 0;
+    for (char c : text) {
+        if (isspace(static_cast<unsigned char>(c)) || c == '=')
+            continue;
+        const int value = base64Value(c);
+        if (value < 0)
+            return false;
+        accum = (accum << 6) | static_cast<uint32_t>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (written >= out.size())
+                return false;
+            out[written++] = static_cast<uint8_t>((accum >> bits) & 0xFF);
+        }
+    }
+    return written == out.size() && (accum & ((1u << bits) - 1)) == 0;
+}
+
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
+{
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(44);
+    for (size_t i = 0; i < key.size(); i += 3) {
+        const size_t remaining = key.size() - i;
+        uint32_t chunk = static_cast<uint32_t>(key[i]) << 16;
+        if (remaining > 1)
+            chunk |= static_cast<uint32_t>(key[i + 1]) << 8;
+        if (remaining > 2)
+            chunk |= key[i + 2];
+        out += alphabet[(chunk >> 18) & 0x3F];
+        out += alphabet[(chunk >> 12) & 0x3F];
+        out += remaining > 1 ? alphabet[(chunk >> 6) & 0x3F] : '=';
+        out += remaining > 2 ? alphabet[chunk & 0x3F] : '=';
+    }
+    return out;
+}
+
+static bool parseSpidevNumber(const char *&cursor, unsigned &value)
+{
+    if (*cursor < '0' || *cursor > '9')
+        return false;
+    value = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+        const unsigned digit = (unsigned)(*cursor - '0');
+        if (value > (std::numeric_limits<unsigned>::max() - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+        ++cursor;
+    }
+    return true;
+}
+
+int spiHostFromDevicePath(const std::string &devicePath)
+{
+    std::string name = devicePath;
+    const std::string devPrefix = "/dev/";
+    if (name.rfind(devPrefix, 0) == 0)
+        name.erase(0, devPrefix.size());
+
+    if (name.rfind("spidev", 0) != 0)
+        return -1;
+
+    // Digit-only fields: reject signs, whitespace and overflow rather than
+    // letting scanf's %u accept them.
+    const char *cursor = name.c_str() + 6;
+    unsigned bus = 0;
+    unsigned device = 0;
+    if (!parseSpidevNumber(cursor, bus) || *cursor++ != '.' || !parseSpidevNumber(cursor, device) || *cursor != '\0')
+        return -1;
+    // HardwareSPI turns the bus into one decimal character and the device into a
+    // signed high nibble, so only 0-9 and 0-7 round-trip through it.
+    if (bus > 9 || device > 7)
+        return -1;
+    return (int)(bus | (device << 4));
+}
+
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
-    mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
+    std::erase(mac_str, ':');
     if (mac_str.length() != 12) {
         return false;
     }
@@ -1359,22 +1857,125 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     return true;
 }
 
-std::string exec(const char *cmd)
-{ // https://stackoverflow.com/a/478960
-#ifdef ARCH_PORTDUINO_WASM
+// Captured output beyond this is drained and dropped; nothing that reads it wants more.
+static constexpr size_t EXEC_MAX_OUTPUT = 4096;
+
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
+{
+    output.clear();
+#if defined(ARCH_PORTDUINO_WASM)
     (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
-    return "";
-#endif
+    (void)timeoutMs;
+    return ExecResult::NotStarted;
+#elif defined(_WIN32)
+    // No process group to kill here, so the timeout is not enforced on Windows.
+    (void)timeoutMs;
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+        return ExecResult::NotStarted;
     std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output += buffer.data();
+    return pclose(pipe) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#else
+    int fds[2];
+    if (pipe(fds) != 0)
+        return ExecResult::NotStarted;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Its own process group, so a timeout can kill the whole pipeline and not just the shell.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    char shell[] = "/bin/sh";
+    char dashC[] = "-c";
+    std::string command(cmd);
+    char *argv[] = {shell, dashC, &command[0], nullptr};
+    pid_t pid;
+    const int spawnError = posix_spawn(&pid, shell, &actions, &attr, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attr);
+    close(fds[1]);
+    if (spawnError != 0) {
+        close(fds[0]);
+        return ExecResult::NotStarted;
     }
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
-        result += buffer.data();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    auto remainingMs = [&deadline]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+    };
+
+    bool timedOut = false;
+    std::array<char, 256> buffer;
+    while (true) {
+        const auto remaining = remainingMs();
+        if (remaining <= 0) {
+            timedOut = true;
+            break;
+        }
+        pollfd pfd = {fds[0], POLLIN, 0};
+        const int ready = poll(&pfd, 1, static_cast<int>(remaining));
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0) {
+            timedOut = true;
+            break;
+        }
+        if (ready < 0)
+            break;
+        const ssize_t n = read(fds[0], buffer.data(), buffer.size());
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break; // EOF: every writer has closed stdout
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output.append(buffer.data(), std::min(static_cast<size_t>(n), EXEC_MAX_OUTPUT - output.size()));
     }
-    return result;
+    close(fds[0]);
+
+    // A command can close stdout and keep running, so the deadline also bounds the wait for it to exit.
+    int status = 0;
+    pid_t waited = 0;
+    while (!timedOut) {
+        waited = waitpid(pid, &status, WNOHANG);
+        if (waited < 0 && errno == EINTR)
+            continue;
+        if (waited != 0)
+            break;
+        if (remainingMs() <= 0)
+            timedOut = true;
+        else
+            usleep(5000);
+    }
+    if (timedOut) {
+        kill(-pid, SIGKILL);
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        return ExecResult::TimedOut;
+    }
+    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#endif
+}
+
+std::string exec(const char *cmd, uint32_t timeoutMs)
+{
+    std::string output;
+    const ExecResult result = execCommand(cmd, timeoutMs, output);
+    if (result == ExecResult::TimedOut)
+        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
+    else if (result == ExecResult::NotStarted)
+        LOG_WARN("Command could not be started: %s", cmd);
+    return output;
 }
 
 #ifndef ARCH_PORTDUINO_WASM
