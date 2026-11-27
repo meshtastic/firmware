@@ -9,6 +9,7 @@
 #include <nrfx_wdt.h>
 
 #include <assert.h>
+#include <atomic>
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
@@ -305,13 +306,67 @@ extern "C" void flash_nrf5x_event_cb(uint32_t event);
 
 // s145 asks the application for entropy. Bluefruit's SoC task answers the same request, but whichever
 // consumer pops the event must seed, so the request is never dropped. HardwareRNG::fill() always fills.
-static void seedSoftDevice()
+static uint32_t seedSoftDevice()
 {
     uint8_t seed[SD_RAND_SEED_SIZE];
     HardwareRNG::fill(seed, sizeof(seed));
-    uint32_t err = sd_rand_seed_set(seed);
-    if (err != NRF_SUCCESS)
-        LOG_WARN("sd_rand_seed_set failed: %u", err);
+    return sd_rand_seed_set(seed);
+}
+
+// Taking an event only notes it: the flash wait below takes them too, deep inside a filesystem write with
+// its lock held, so seeding, recording and logging are left to checkSDEvents() in the main loop.
+static volatile bool seedRequested = false;
+static volatile bool powerFailureWarned = false;
+static std::atomic<uint32_t> unexpectedSDEvents{0};
+static volatile uint32_t lastUnexpectedSDEvent = 0;
+
+static void noteSDEvent(uint32_t evt)
+{
+    switch (evt) {
+    case NRF_EVT_POWER_FAILURE_WARNING:
+        powerFailureWarned = true;
+        break;
+    // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
+    case NRF_EVT_FLASH_OPERATION_SUCCESS:
+    case NRF_EVT_FLASH_OPERATION_ERROR:
+        flash_nrf5x_event_cb(evt);
+        break;
+    case NRF_EVT_RAND_SEED_REQUEST:
+        seedRequested = true;
+        break;
+
+    default:
+        lastUnexpectedSDEvent = evt;
+        unexpectedSDEvents++;
+        break;
+    }
+}
+
+// The core's flash driver drains the SoC event queue while it waits for a flash completion, so a
+// lost completion cannot park the writing task forever; whatever else it pulls out lands here.
+extern "C" void flash_nrf5x_soc_event_hook(uint32_t evt)
+{
+    noteSDEvent(evt);
+}
+
+static void handleNotedSDEvents()
+{
+    if (powerFailureWarned) {
+        powerFailureWarned = false;
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
+    }
+    // Cleared first, so a request noted while seeding is answered on the next pass, as is a refused seed
+    if (seedRequested) {
+        seedRequested = false;
+        uint32_t err = seedSoftDevice();
+        if (err != NRF_SUCCESS) {
+            seedRequested = true;
+            LOG_WARN("sd_rand_seed_set failed: %u, retrying", err);
+        }
+    }
+    uint32_t unexpected = unexpectedSDEvents.exchange(0);
+    if (unexpected)
+        LOG_DEBUG("Unexpected SDevt %u (%u since the last report)", lastUnexpectedSDEvent, unexpected);
 }
 
 void checkSDEvents()
@@ -319,24 +374,9 @@ void checkSDEvents()
     if (useSoftDevice) {
         uint32_t evt;
         while (NRF_SUCCESS == sd_evt_get(&evt)) {
-            switch (evt) {
-            case NRF_EVT_POWER_FAILURE_WARNING:
-                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
-                break;
-            // Bluefruit's SoC task polls the same queue; an event taken here must still reach the flash driver
-            case NRF_EVT_FLASH_OPERATION_SUCCESS:
-            case NRF_EVT_FLASH_OPERATION_ERROR:
-                flash_nrf5x_event_cb(evt);
-                break;
-            case NRF_EVT_RAND_SEED_REQUEST:
-                seedSoftDevice();
-                break;
-
-            default:
-                LOG_DEBUG("Unexpected SDevt %d", evt);
-                break;
-            }
+            noteSDEvent(evt);
         }
+        handleNotedSDEvents();
     } else {
         if (NRF_POWER->EVENTS_POFWARN)
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
