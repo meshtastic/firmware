@@ -388,8 +388,8 @@ static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
 }
 
 // Channels::ensurePrimary() restores a PRIMARY when the saved table has none. The boot-time clamp must call it
-// before hashing: otherwise it hashes whatever name slot 0 holds and saves that slot as channel_num, which
-// stays wrong after onConfigChanged() later restores the default primary.
+// first: the clamp and the radio take the primary's name for the slot, and without a PRIMARY that is whatever
+// name slot 0 holds.
 static void test_clampLoadedLoraConfig_noPrimaryRestoresTheDefaultBeforeHashing()
 {
     channels.initDefaults();
@@ -407,9 +407,11 @@ static void test_clampLoadedLoraConfig_noPrimaryRestoresTheDefaultBeforeHashing(
 
     nodeDB->clampLoadedLoraConfig();
 
-    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channelFile.channels[0].role);
     TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+    TEST_ASSERT_EQUAL_UINT32(presetSlot,
+                             RadioInterface::resolveFrequencySlot(config.lora, channelFile.channels[0].settings.name));
 }
 
 // A SECONDARY at the stale primary slot is promoted with its own key, not replaced by the default:
