@@ -335,11 +335,21 @@ void Router::useReceivedPayload(meshtastic_MeshPacket *relay) const
     if (relay->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
         return;
 #endif
-    fixPriority(relay); // Priority is derived from the decoded payload, which is about to be replaced
-    relay->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    relay->encrypted = frame->encrypted;
-    relay->channel = frame->channel; // The channel hash as received, not the local index decoding resolved
-    relay->pki_encrypted = frame->pki_encrypted;
+    // The channel hash as received, not the local index decoding resolved
+    useEncodedPayload(relay, frame->encrypted.bytes, frame->encrypted.size, frame->channel, frame->pki_encrypted);
+}
+
+void Router::useEncodedPayload(meshtastic_MeshPacket *p, const pb_byte_t *bytes, pb_size_t size, uint8_t channel,
+                               bool pkiEncrypted)
+{
+    if (size > sizeof(p->encrypted.bytes))
+        return;     // Stays decoded, so send() encodes it as before
+    fixPriority(p); // Priority is derived from the decoded payload, which is about to be replaced
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    memcpy(p->encrypted.bytes, bytes, size);
+    p->encrypted.size = size;
+    p->channel = channel;
+    p->pki_encrypted = pkiEncrypted;
 }
 
 /**

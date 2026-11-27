@@ -129,6 +129,13 @@ class ReliableRouterTestShim : public ReliableRouter
         return entry->nextTxMsec;
     }
 
+    size_t pendingWireSize(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(entry);
+        return entry->wire.size();
+    }
+
     const meshtastic_MeshPacket *pendingPacket(NodeNum from, PacketId id)
     {
         PendingPacket *entry = findPendingPacket(from, id);
@@ -1140,8 +1147,9 @@ void test_ingress_forged_copy_of_own_pki_dm_mints_no_implicit_ack(void)
     TEST_ASSERT_EQUAL_UINT32(2, radio->sentPackets.size());
 }
 
-// PKI encryption draws a fresh nonce per encode, so a retry is a different frame. The record must
-// follow it: a relay of the retry is what a neighbour will actually repeat.
+// PKI encryption draws a fresh nonce per encode, so a re-encoded retry would be a different frame and a
+// late relay of an earlier attempt would stop matching. Retries therefore resend the first frame
+// unchanged, and a relay of the retry mints the implicit ACK like a relay of the first attempt.
 void test_ingress_relayed_copy_of_own_pki_retry_mints_implicit_ack(void)
 {
     installPkiPeer(kRemoteNode);
@@ -1157,16 +1165,89 @@ void test_ingress_relayed_copy_of_own_pki_retry_mints_implicit_ack(void)
     TEST_ASSERT_TRUE(retry.pki_encrypted);
     TEST_ASSERT_EQUAL_UINT8(first.channel, retry.channel);
     TEST_ASSERT_EQUAL_UINT32(first.encrypted.size, retry.encrypted.size);
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(first.encrypted.bytes, retry.encrypted.bytes, first.encrypted.size));
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(first.encrypted.bytes, retry.encrypted.bytes, first.encrypted.size,
+                                     "a retry must resend the first frame, not a fresh encryption");
 
     ingressOverheard(relayedCopyOf(retry, 0x4D, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA));
     expectSinglePhoneAck(original.id, 0, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA);
     TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
 }
 
-// A relay that holds the channel key rebroadcasts what it decoded, and may change it on the way: a
-// traceroute relay appends its hop, an older firmware drops fields it does not know. Channel traffic
-// therefore keeps the header match; only a PKI payload is bound to bytes.
+// A neighbour may repeat the first attempt after our retry has already gone out. Both attempts carry the
+// same bytes, so that late relay still proves the DM left us and cancels the remaining retries.
+void test_ingress_late_relay_of_first_pki_attempt_mints_implicit_ack(void)
+{
+    installPkiPeer(kRemoteNode);
+    auto original = makePkiDm();
+    const auto first = seedPkiDmViaSend(original);
+    mockRoutingModule->ackNaks.clear();
+    mockRoutingModule->loopback = true;
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+    TEST_ASSERT_EQUAL_UINT32(2, radio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    ingressOverheard(relayedCopyOf(first, 0x4D, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA));
+    expectSinglePhoneAck(original.id, 0, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA);
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
+}
+
+// Only the copy each retry sends carries the recorded frame. The pending packet stays decoded on its local
+// channel index, because the NAK sent when retries run out is addressed by that index, not by the wire's
+// channel byte (always 0 for PKI). Every attempt, including the final flood, must be the first frame.
+void test_pki_retries_resend_first_frame_and_nak_on_local_channel(void)
+{
+    installPkiPeer(kRemoteNode);
+    auto original = makePkiDm();
+    original.channel = 1;
+    const auto first = seedPkiDmViaSend(original);
+    TEST_ASSERT_EQUAL_UINT32(first.encrypted.size, reliableShim->pendingWireSize(kLocalNode, original.id));
+    mockRoutingModule->ackNaks.clear();
+
+    size_t rounds = 0;
+    while (reliableShim->hasPending(kLocalNode, original.id) && rounds++ < 10) {
+        const meshtastic_MeshPacket *pending = reliableShim->pendingPacket(kLocalNode, original.id);
+        TEST_ASSERT_EQUAL(meshtastic_MeshPacket_decoded_tag, pending->which_payload_variant);
+        TEST_ASSERT_EQUAL_UINT8(1, pending->channel);
+        reliableShim->makeRetryDue(kLocalNode, original.id);
+        reliableShim->runDueRetries();
+    }
+    TEST_ASSERT_FALSE_MESSAGE(reliableShim->hasPending(kLocalNode, original.id), "retries must run out");
+    TEST_ASSERT_TRUE_MESSAGE(radio->sentPackets.size() > 2, "fixture: at least two retries must have gone out");
+
+    for (const auto &sent : radio->sentPackets) {
+        TEST_ASSERT_TRUE(sent.pki_encrypted);
+        TEST_ASSERT_EQUAL_UINT8(first.channel, sent.channel);
+        TEST_ASSERT_EQUAL_UINT32(first.encrypted.size, sent.encrypted.size);
+        TEST_ASSERT_EQUAL_MEMORY(first.encrypted.bytes, sent.encrypted.bytes, first.encrypted.size);
+    }
+
+    bool nakOnLocalChannel = false;
+    for (const auto &ackNak : mockRoutingModule->ackNaks)
+        if (std::get<0>(ackNak) == meshtastic_Routing_Error_MAX_RETRANSMIT && std::get<2>(ackNak) == original.id)
+            nakOnLocalChannel = std::get<3>(ackNak) == 1;
+    TEST_ASSERT_TRUE_MESSAGE(nakOnLocalChannel, "the give-up NAK must go out on the DM's local channel index");
+}
+
+// Channel traffic records no frame: a relay may legitimately re-encode it, so it keeps the header match.
+void test_channel_dm_records_no_wire_form(void)
+{
+    auto original = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    const auto wire = seedViaSend(original);
+    TEST_ASSERT_FALSE(wire.pki_encrypted);
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingWireSize(kLocalNode, original.id));
+
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    reliableShim->runDueRetries();
+    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingWireSize(kLocalNode, original.id));
+    TEST_ASSERT_FALSE(radio->sentPackets.back().pki_encrypted);
+}
+
+// Most relays now forward the ciphertext they received, but a traceroute relay appends its hop and
+// re-encodes, and firmware that predates forwarding the received ciphertext re-encodes channel traffic,
+// dropping fields it does not know. Channel traffic therefore keeps the header match; only a PKI payload
+// is bound to bytes.
 void test_ingress_reencoded_relay_of_own_channel_dm_mints_implicit_ack(void)
 {
     auto original = makeDecodedPacket(meshtastic_PortNum_TRACEROUTE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
@@ -1349,6 +1430,9 @@ void setup()
     RUN_TEST(test_ingress_relayed_copy_of_own_pki_dm_mints_implicit_ack);
     RUN_TEST(test_ingress_forged_copy_of_own_pki_dm_mints_no_implicit_ack);
     RUN_TEST(test_ingress_relayed_copy_of_own_pki_retry_mints_implicit_ack);
+    RUN_TEST(test_ingress_late_relay_of_first_pki_attempt_mints_implicit_ack);
+    RUN_TEST(test_pki_retries_resend_first_frame_and_nak_on_local_channel);
+    RUN_TEST(test_channel_dm_records_no_wire_form);
     RUN_TEST(test_ingress_reencoded_relay_of_own_channel_dm_mints_implicit_ack);
     RUN_TEST(test_ingress_decoded_copy_of_own_dm_mints_implicit_ack_on_header);
 

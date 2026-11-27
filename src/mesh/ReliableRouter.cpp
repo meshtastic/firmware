@@ -84,8 +84,8 @@ void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
     auto old = findPendingPacket(key);
     if (old) {
         // The header is cleartext anyone can copy. For a PKI DM send() recorded the ciphertext, which no
-        // relay can alter, so an encrypted copy must carry those exact bytes; anything else keeps the
-        // header match, as a relay holding the channel key may legitimately re-encode what it forwards.
+        // relay can alter, so an encrypted copy must carry those exact bytes; channel traffic keeps the
+        // header match, as a traceroute relay or older firmware may legitimately re-encode what it forwards.
         if (!old->wire.empty() && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
             (p->encrypted.size != old->wire.size() || memcmp(p->encrypted.bytes, old->wire.data(), old->wire.size()) != 0)) {
             // Attacker-triggerable at will, so DEBUG: a flood of these is the check working, not a fault.
@@ -246,7 +246,7 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
     // all forces a DH. With it, only ids we genuinely have outstanding can, and only while pending.
     //
     // The cost of that gate: a relay's rebroadcast of our own DM already cleared this entry via
-    // perhapsGenerateImplicitAckForOwnOverheard, so on most multi-hop DMs the peer's genuine proof
+    // perhapsAckOurRelayedPacket, so on most multi-hop DMs the peer's genuine proof
     // arrives after the entry is gone and reads ABSENT. Do not "fix" that by dropping the gate - it
     // is the DoS guard. Checking the proof before the echo clears the entry, or keeping a short-lived
     // record of completed sends to verify against, is the shape of a real fix.

@@ -237,6 +237,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void useReceivedPayload(meshtastic_MeshPacket *relay) const;
 
+    /// Swap p's decoded payload for an already encoded frame, so send() transmits those bytes instead of re-encoding.
+    static void useEncodedPayload(meshtastic_MeshPacket *p, const pb_byte_t *bytes, pb_size_t size, uint8_t channel,
+                                  bool pkiEncrypted);
+
     /// The received frame set by ReceivedFrameScope, or nullptr outside one.
     const meshtastic_MeshPacket *receivedFrame = nullptr;
 

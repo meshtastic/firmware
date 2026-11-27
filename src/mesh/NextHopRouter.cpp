@@ -396,17 +396,26 @@ PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
 
 void NextHopRouter::noteWireForm(const meshtastic_MeshPacket *p)
 {
-    // Only a PKI payload is bound to the exact bytes: a relay that holds the channel key re-encodes what it
-    // forwards (traceroute rewrites it, an older firmware drops fields it does not know), so those keep the
-    // header-only ACK. The pending copy stays decoded, so a retry re-encodes and re-records here.
+    // Only a PKI payload is bound to the exact bytes: a traceroute relay, or one on firmware that predates
+    // forwarding the received ciphertext, re-encodes channel traffic, so that keeps the header-only ACK.
     if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag || !p->pki_encrypted)
         return;
     // p->from for origin safety: by here Router::send() has replaced a phone-originated 0 with our own
     // node number, so this is an address we set, not one a client chose. Before that line, use getFrom().
     PendingPacket *rec = findPendingPacket(p->from, p->id);
-    if (!rec)
-        return;
+    if (!rec || !rec->wire.empty())
+        return; // Retries resend the first frame (allocRetryCopy), so a relay of any attempt carries these bytes
     rec->wire.assign(p->encrypted.bytes, p->encrypted.bytes + p->encrypted.size);
+    rec->wireChannel = p->channel;
+}
+
+meshtastic_MeshPacket *NextHopRouter::allocRetryCopy(const PendingPacket &p)
+{
+    // The pending packet stays decoded: the final NAK needs its local channel index, not the wire's channel byte
+    meshtastic_MeshPacket *copy = packetPool.allocCopy(*p.packet);
+    if (copy && !p.wire.empty())
+        useEncodedPayload(copy, p.wire.data(), p.wire.size(), p.wireChannel, true);
+    return copy;
 }
 
 /**
@@ -528,7 +537,7 @@ int32_t NextHopRouter::doRetransmissions()
                             trafficManagementModule->clearNextHop(p.packet->to);
                         }
 #endif
-                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                        if (auto *copy = allocRetryCopy(p)) {
                             if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
                                 packetPool.release(copy);
                         }
@@ -545,18 +554,18 @@ int32_t NextHopRouter::doRetransmissions()
                             meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                             if (sentTo)
                                 sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (auto *copy = allocRetryCopy(p)) {
                                 if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
                                     packetPool.release(copy);
                             }
                         } else {
-                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (auto *copy = allocRetryCopy(p)) {
                                 if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                     packetPool.release(copy);
                             }
                         }
 #else
-                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                        if (auto *copy = allocRetryCopy(p)) {
                             if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
                                 packetPool.release(copy);
                         }
@@ -565,7 +574,7 @@ int32_t NextHopRouter::doRetransmissions()
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                    if (auto *copy = allocRetryCopy(p)) {
                         if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
                             packetPool.release(copy);
                     }

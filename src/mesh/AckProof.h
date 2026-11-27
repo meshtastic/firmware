@@ -34,9 +34,9 @@
  *  - The ack stays channel-encrypted, so relays keep reading request_id for next-hop learning and
  *    retransmission cancel. Authentication without confidentiality is the point.
  *  - This does NOT protect the retransmission loop, and must not be described as if it does.
- *    ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard clears a pending retransmission on
- *    any overheard rebroadcast of our own (from, id) - header-only, no key, and it fires even on a
- *    PKI DM we cannot read. Replaying the originator's own ciphertext stops their retries more
+ *    ReliableRouter::perhapsAckOurRelayedPacket clears a pending retransmission on any overheard
+ *    rebroadcast of our own (from, id) - for a PKI DM it also needs our exact ciphertext, but no key
+ *    either way, and it fires even on a PKI DM we cannot read. Replaying the originator's own ciphertext stops their retries more
  *    cheaply than forging an ack, so no ack authentication of any kind closes that path. The one
  *    property on offer here is the receipt.
  *  - Only the original sender can verify. A relay cannot, so a forged ack still propagates and
