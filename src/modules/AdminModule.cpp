@@ -337,9 +337,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz - apply the config.
-        // Fail closed: null instance is treated as incapable.
-        if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
+        // Hardware supports 2.4 GHz - apply the config. Ask the active interface, which is not always a RadioLib
+        // chip (meshtasticd's transparent radio is another node's). Fail closed: no interface is incapable.
+        if (router && router->getRadioIface() && router->getRadioIface()->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
             handleSetConfig(r->set_config, fromOthers);
             break;
@@ -871,14 +871,14 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     if (!wasOn && nowOn)
         accelerometerThread->setMotionPolling(true);
-    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading())
+    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE)
         accelerometerThread->setMotionPolling(false);
 #else
     if (!wasOn && nowOn && accelerometerThread->enabled == false) {
         accelerometerThread->enabled = true;
         accelerometerThread->start();
     } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
-               !accelerometerThread->providesHeading()) {
+               !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE) { // the screen follows its turns
         accelerometerThread->disable();
     }
 #endif

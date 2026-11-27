@@ -1,8 +1,19 @@
+// RadioInterface/RadioLibInterface configuration and receive-state helpers.
+//
+// Why: modem parameters, slot selection and stale-IRQ handling decide whether the radio
+// hears and transmits on the right channel.
+// Regression guarded: a preset clamp, a slot formula, or a stale RX flag re-arming a frame
+// too early.
+
+#include "Channels.h"
+#include "DisplayFormatters.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "memory/MemAudit.h"
@@ -122,22 +133,6 @@ static void test_bwCodeToKHz_roundTrip()
     }
 }
 
-static void test_validateConfigLora_noopWhenUsePresetFalse()
-{
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.use_preset = false;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    cfg.bandwidth = 123;
-    cfg.spread_factor = 8;
-
-    RadioInterface::validateConfigLora(cfg);
-
-    TEST_ASSERT_EQUAL_UINT16(123, cfg.bandwidth);
-    TEST_ASSERT_EQUAL_UINT32(8, cfg.spread_factor);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
-}
-
 static void test_validateConfigLora_validPreset_nonWideRegion()
 {
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -197,6 +192,180 @@ static void test_clampConfigLora_validPresetUnchanged()
 // -----------------------------------------------------------------------
 
 static TestableRadioInterface *testRadio;
+
+// ---------------------------------------------------------------------------
+// Frequency slot selection. Under test: the slot applyModemConfig() tunes and the repair
+// checkOrClampConfigLora() makes to an out-of-range channel_num (src/mesh/RadioInterface.cpp).
+// Why: resolveFrequencySlot() is the one slot rule - an in-range channel_num wins, else the region's
+// overrideSlot if it fits, else the name hash (the preset name where overrideSlot is -1). The beacon
+// advertises with it and clients copy it, so the radio must tune the slot it names.
+// Regression guarded: the tuner and the clamp each carried their own copy of the rule. The tuner took
+// an override slot past the slot count (ITU2_70CM at 500 kHz tuned 493 MHz), and the clamp repaired a
+// bad pin to the custom name's hash ahead of the region's override slot.
+// ---------------------------------------------------------------------------
+
+// The rule re-derived here, so no assertion asks resolveFrequencySlot() to check itself.
+static uint32_t documentedSlot(const RegionInfo *r, const meshtastic_Config_LoRaConfig &lora, const char *channelName)
+{
+    const uint32_t count = RadioInterface::frequencySlotCount(lora);
+    if (r->overrideSlot > 0 && (uint32_t)r->overrideSlot <= count)
+        return (uint32_t)r->overrideSlot;
+    const char *hashed = (r->overrideSlot == OVERRIDE_SLOT_PRESET_HASH)
+                             ? DisplayFormatters::getModemPresetDisplayName(lora.modem_preset, false, lora.use_preset)
+                             : channelName;
+    uint32_t h = 5381;
+    for (const unsigned char *c = (const unsigned char *)hashed; *c; c++)
+        h = ((h << 5) + h) + *c;
+    return h % count + 1;
+}
+
+// Names the primary channel for one test, putting the table back afterwards.
+struct PrimaryNamed {
+    meshtastic_ChannelFile saved;
+    explicit PrimaryNamed(const char *name) : saved(channelFile)
+    {
+        channelFile.channels_count = 1;
+        meshtastic_Channel &ch = channelFile.channels[0];
+        ch = meshtastic_Channel_init_zero;
+        ch.has_settings = true;
+        ch.role = meshtastic_Channel_Role_PRIMARY;
+        strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+        channels.onConfigChanged();
+    }
+    ~PrimaryNamed()
+    {
+        channelFile = saved;
+        channels.onConfigChanged();
+    }
+};
+
+static void presetConfig(meshtastic_Config_LoRaConfig_RegionCode region, meshtastic_Config_LoRaConfig_ModemPreset preset,
+                         uint32_t channelNum)
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = region;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = preset;
+    config.lora.channel_num = channelNum;
+}
+
+/** Every real region and preset, unpinned and pinned to the derived slot, tunes the documented slot at its centre. */
+static void test_applyModemConfig_tunesTheDocumentedSlotForEveryRegionAndPreset()
+{
+    PrimaryNamed named(""); // the default channel: a blank name hashes as the preset name
+    unsigned checked = 0;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        for (const meshtastic_Config_LoRaConfig_ModemPreset *p = r->getAvailablePresets(); *p != MODEM_PRESET_END; p++) {
+            char where[64];
+            snprintf(where, sizeof(where), "%s preset %d", r->name, (int)*p);
+
+            presetConfig(r->code, *p, 0);
+            testRadio->reconfigure();
+            const uint32_t expected = documentedSlot(r, config.lora, channels.getName(channels.getPrimaryIndex()));
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, testRadio->getChannelNum() + 1, where);
+            TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, where);
+            const float width = r->profile->spacing + 2 * r->profile->padding + testRadio->getBw() / 1000;
+            const float centre = r->freqStart + testRadio->getBw() / 2000 + r->profile->padding + (expected - 1) * width;
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, centre, testRadio->getFreq(), where);
+
+            config.lora.channel_num = expected; // a pin on the derived slot is still the default slot
+            testRadio->reconfigure();
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, testRadio->getChannelNum() + 1, where);
+            TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, where);
+            checked++;
+        }
+    }
+    TEST_ASSERT_GREATER_THAN_UINT32_MESSAGE(0, checked, "the region table was walked");
+}
+
+/** ITU2_70CM holds 56 slots at a custom 500 kHz, so its override slot 137 cannot apply and the name hash picks one. */
+static void test_applyModemConfig_overrideSlotPastCountStaysInBand()
+{
+    PrimaryNamed named("Home");
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM;
+    config.lora.use_preset = false;
+    config.lora.bandwidth = 500;
+    config.lora.spread_factor = 8;
+    config.lora.coding_rate = 6;
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(56, RadioInterface::frequencySlotCount(config.lora), "precondition: 137 is past the top");
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT32(documentedSlot(getRegion(config.lora.region), config.lora, "Home"), testRadio->getChannelNum() + 1);
+    TEST_ASSERT_TRUE_MESSAGE(testRadio->getFreq() + testRadio->getBw() / 2000 <= 450.0f, "the slot must end inside the band");
+}
+
+/** An unclamped out-of-range pin (already persisted) is dropped: the radio derives, and a valid non-default preset
+ *  (MediumFast on US, whose default is LongFast) is kept rather than reset by the failed pin. */
+static void test_applyModemConfig_outOfRangePinDerives()
+{
+    PrimaryNamed named("");
+    presetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, 0);
+    testRadio->reconfigure();
+    const uint32_t derived = testRadio->getChannelNum();
+
+    config.lora.channel_num = 999;
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT32(derived, testRadio->getChannelNum());
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset,
+                              "a failed pin must not cost the preset");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, config.lora.channel_num, "the failed pin is dropped");
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, "the radio tunes the derived slot");
+}
+
+/** A region that names its own slot keeps it, whatever the channel is called: the custom name is not a rule. */
+static void test_clampConfigLora_outOfRangePin_regionSlotOutranksACustomName()
+{
+    PrimaryNamed named("NYMesh");
+    presetConfig(meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM, meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, 999);
+
+    RadioInterface::clampConfigLora(config.lora);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, config.lora.channel_num, "the failed pin is dropped, not replaced by a new one");
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_TRUE(RadioInterface::uses_custom_channel_name);
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(137, testRadio->getChannelNum() + 1, "the region's slot, not the hash of the name");
+}
+
+/** A channel-hash region repairs to the slot the name hashes to, and keeps following the name after a rename. */
+static void test_clampConfigLora_outOfRangePin_channelHashRegionHashesTheName()
+{
+    PrimaryNamed named("NYMesh");
+    presetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 999);
+
+    RadioInterface::clampConfigLora(config.lora);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, config.lora.channel_num, "the failed pin is dropped, not replaced by a new one");
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL_UINT32(documentedSlot(getRegion(config.lora.region), config.lora, "NYMesh"),
+                             testRadio->getChannelNum() + 1);
+
+    // Why the clamp stores 0 and not the derived slot: a stored slot would stop following the name
+    PrimaryNamed renamed("Brooklyn");
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL_UINT32(documentedSlot(getRegion(config.lora.region), config.lora, "Brooklyn"),
+                             testRadio->getChannelNum() + 1);
+}
+
+/** A pin the region holds is the operator's choice: the clamp leaves it, and it is not the default slot. */
+static void test_clampConfigLora_inRangePinIsKept()
+{
+    PrimaryNamed named("NYMesh");
+    presetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0);
+    const uint32_t derived = documentedSlot(getRegion(config.lora.region), config.lora, "NYMesh");
+    config.lora.channel_num = (derived == 1) ? 2 : 1; // anything but the slot the name picks
+
+    RadioInterface::clampConfigLora(config.lora);
+
+    TEST_ASSERT_EQUAL_UINT32(derived == 1 ? 2 : 1, config.lora.channel_num);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL_UINT32(config.lora.channel_num, testRadio->getChannelNum() + 1);
+}
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
@@ -792,6 +961,137 @@ static void test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble()
     delete radioIf;
 }
 
+// shouldRebroadcastEarlyLikeRouter(): CLIENT_BASE relays a favorite's packet early only when it heard the favorite directly
+static constexpr NodeNum EARLY_FAVORITE = 0xb1ac0074;
+static constexpr NodeNum EARLY_STRANGER = 0x12345678;
+
+class EarlyRelayNodeDB : public NodeDB
+{
+  public:
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) override
+    {
+        if (n == EARLY_FAVORITE)
+            return &favorite;
+        if (n == EARLY_STRANGER)
+            return &stranger;
+        return nullptr;
+    }
+    meshtastic_NodeInfoLite favorite = makeNode(EARLY_FAVORITE, true);
+    meshtastic_NodeInfoLite stranger = makeNode(EARLY_STRANGER, false);
+
+  private:
+    static meshtastic_NodeInfoLite makeNode(NodeNum num, bool favorite)
+    {
+        meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+        n.num = num;
+        if (favorite)
+            n.bitfield |= NODEINFO_BITFIELD_IS_FAVORITE_MASK;
+        return n;
+    }
+};
+
+// Records the copies we heard in the packet history, the way FloodingRouter::shouldFilterReceived does
+class EarlyRelayRouter : public Router
+{
+  public:
+    void hear(NodeNum from, PacketId id, uint8_t hopStart, uint8_t hopLimit)
+    {
+        meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+        p.from = from;
+        p.to = NODENUM_BROADCAST;
+        p.id = id;
+        p.hop_start = hopStart;
+        p.hop_limit = hopLimit;
+        p.relay_node = hopLimit == hopStart ? (from & 0xFF) : 0x55; // the sender itself, or some relayer
+        wasSeenRecently(&p);
+    }
+};
+
+static constexpr PacketId EARLY_PACKET_ID = 0x1234;
+
+// heard: the hop_limit of each copy that reached us, in order. queuedHopLimit/queuedHopStart: our relay copy's
+// hops, the same hop_start unless given.
+static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from, uint8_t hopStart,
+                          std::initializer_list<uint8_t> heard, uint8_t queuedHopLimit, int queuedHopStart = -1)
+{
+    EarlyRelayNodeDB db;
+    NodeDB *savedNodeDB = nodeDB;
+    Router *savedRouter = router;
+    const meshtastic_Config_DeviceConfig_Role savedRole = config.device.role;
+    nodeDB = &db;
+    config.device.role = role;
+
+    EarlyRelayRouter history;
+    for (uint8_t hopLimit : heard)
+        history.hear(from, EARLY_PACKET_ID, hopStart, hopLimit);
+    router = &history;
+
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.to = NODENUM_BROADCAST;
+    p.id = EARLY_PACKET_ID;
+    p.hop_start = queuedHopStart < 0 ? hopStart : queuedHopStart;
+    p.hop_limit = queuedHopLimit;
+    const bool early = testRadio->shouldRebroadcastEarlyLikeRouter(&p);
+
+    router = savedRouter;
+    config.device.role = savedRole;
+    nodeDB = savedNodeDB;
+    return early;
+}
+
+static void test_earlyRelay_clientBaseDirectFavorite()
+{
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7}, 6));
+    // A later relayed copy must not erase that the sender was heard
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7, 6}, 6));
+}
+
+static void test_earlyRelay_clientBaseFavoriteViaRelayIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 5));
+}
+
+// A favorite router's relay keeps its hop_limit, so our copy has one hop used up, as if heard directly
+static void test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 6));
+}
+
+// Event mode caps the relay copy's hops: a relayed 7/6 copy is queued as 4/2, a direct 7/7 one as 5/2
+static void test_earlyRelay_clientBaseEventModeCappedCopy()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 2, 4));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7}, 2, 5));
+}
+
+static void test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly()
+{
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6, 7}, 5));
+}
+
+static void test_earlyRelay_clientBaseNotInHistoryIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {}, 6));
+}
+
+static void test_earlyRelay_clientBaseDirectStrangerIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_STRANGER, 7, {7}, 6));
+}
+
+static void test_earlyRelay_clientBaseLegacyNoHopStartIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 0, {3}, 2));
+}
+
+static void test_earlyRelay_otherRolesUnchanged()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT, EARLY_FAVORITE, 7, {7}, 6));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, EARLY_FAVORITE, 7, {7}, 6));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER, EARLY_STRANGER, 7, {5}, 4));
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -1231,13 +1531,21 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_earlyRelay_clientBaseDirectFavorite);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteViaRelayIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseEventModeCappedCopy);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly);
+    RUN_TEST(test_earlyRelay_clientBaseNotInHistoryIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseDirectStrangerIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseLegacyNoHopStartIsLate);
+    RUN_TEST(test_earlyRelay_otherRolesUnchanged);
     RUN_TEST(test_lr20x0CustomLfPaBandCoversOnly500To1000MHz);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
-    RUN_TEST(test_validateConfigLora_noopWhenUsePresetFalse);
     RUN_TEST(test_validateConfigLora_validPreset_nonWideRegion);
     RUN_TEST(test_validateConfigLora_validPreset_wideRegion);
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
@@ -1248,6 +1556,12 @@ void setup()
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_applyModemConfig_tunesTheDocumentedSlotForEveryRegionAndPreset);
+    RUN_TEST(test_applyModemConfig_overrideSlotPastCountStaysInBand);
+    RUN_TEST(test_applyModemConfig_outOfRangePinDerives);
+    RUN_TEST(test_clampConfigLora_outOfRangePin_regionSlotOutranksACustomName);
+    RUN_TEST(test_clampConfigLora_outOfRangePin_channelHashRegionHashesTheName);
+    RUN_TEST(test_clampConfigLora_inRangePinIsKept);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

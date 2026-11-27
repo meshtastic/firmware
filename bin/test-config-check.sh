@@ -139,6 +139,7 @@ assert_clean_module module-lr1120.yaml lr1120
 assert_clean_module module-lr1121.yaml lr1121
 assert_clean_module module-sim.yaml sim
 assert_clean_module module-auto.yaml auto
+assert_clean_module module-transparent.yaml transparent
 
 echo
 echo "other configs that must not be flagged:"
@@ -156,9 +157,10 @@ assert "bluetooth section parses" 0 bluetooth.yaml check \
 assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
 	"Bluetooth.Enabled is not a true/false value" \
 	"Result: 0 errors, 1 warning"
+# A build without BLE support adds its own build-time warning, so do not pin the count.
 assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
 	"is not a BlueZ adapter name" \
-	"Result: 0 errors, 1 warning"
+	"Result: 0 errors,"
 
 echo
 echo "serial module:"
@@ -195,6 +197,35 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 	"rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=" \
 	"NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=" \
 	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
+
+echo
+echo "ignore relay nodes:"
+assert "a list of relay node numbers is clean" 0 ignore-relay-nodes.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an entry that is not a node number is refused" 1 ignore-relay-nodes-bad.yaml check \
+	"is not a node number" \
+	"Result: 1 error, 0 warnings"
+assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-nodes-bad.yaml normal \
+	"is not a node number"
+assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
+	"share low byte 0x44" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 collides with one ending in ff" 0 ignore-relay-nodes-zero-ff.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"share low byte 0xff" \
+	"Result: 0 errors, 2 warnings"
+assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
+	"'Lora.IgnoreRelayNodes' is set in 2 files" \
+	"The lists accumulate; to remove an entry, edit the file that adds it" \
+	"Result: 0 errors,"
+assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
+	"must be a list of node numbers" \
+	"Result: 1 error, 0 warnings"
+assert "relay nodes as a scalar are refused on a normal boot" 1 ignore-relay-nodes-not-a-list.yaml normal \
+	"must be a list of node numbers"
 
 echo
 echo "command sensors:"
@@ -241,6 +272,18 @@ assert "unknown module names the valid set" 1 module-unknown.yaml check \
 assert "wrong-case module suggests the right spelling" 1 module-wrong-case.yaml check \
 	"did you mean 'LLCC68'?" \
 	"Result: 1 error, 0 warnings"
+
+echo
+echo "transparent radio:"
+assert "transparent with no device is refused" 1 module-transparent-no-device.yaml check \
+	"Lora.TransparentDevice is not set" \
+	"Result: 1 error, 0 warnings"
+assert "an endpoint startup would refuse is refused" 1 transparent-device-bad.yaml check \
+	"is neither a serial device path nor host[:port]" \
+	"Result: 1 error, 0 warnings"
+assert "a device for another module is flagged" 0 transparent-device-unused.yaml check \
+	"Lora.TransparentDevice is set but Module is sim" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "LR11xx rfswitch table:"
@@ -430,6 +473,14 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "Webserver.HTTPPort outside its usable range" 1 webserver-http-port.yaml check \
+	"Webserver.HTTPPort 70000 is not a usable TCP port" \
+	"!unknown key" \
+	"Result: 1 error, 0 warnings"
+assert "Webserver.HTTPPort without Port never listens" 0 webserver-http-port-alone.yaml check \
+	"Webserver.HTTPPort is set but Webserver.Port is not" \
+	"!unknown key" \
+	"Result: 0 errors, 1 warning"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"
@@ -537,6 +588,59 @@ assert "unparseable config still reaches the report" 1 malformed-indent.yaml che
 	"could not be parsed" \
 	"error at line 7" \
 	"Result: 1 error, 0 warnings"
+
+echo
+echo "SPI device paths:"
+assert "valid display and touchscreen paths are clean" 0 spidev-valid.yaml check \
+	"Display spidev    : /dev/spidev1.0" \
+	"Touchscreen spidev: /dev/spidev0.1" \
+	"Result: 0 errors, 0 warnings"
+assert "display path on a bus the decoder cannot name is refused" 1 spidev-invalid-display.yaml check \
+	"Display.spidev 'spidev10.0' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "touchscreen device above 7 is refused" 1 spidev-invalid-touch.yaml check \
+	"Touchscreen.spidev 'spidev1.8' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "a Lora path outside the packing range is informational only" 0 spidev-lora-info.yaml check \
+	"Lora.spidev 'spidev10.0' is not a usable path" \
+	"Result: 0 errors, 0 warnings"
+assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.yaml check \
+	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
+	"Result: 1 error, 0 warnings"
+assert "a later file supplies the radio path" 0 spidev-lora-override/config.yaml check \
+	"!Lora.spidev is empty" \
+	"Result: 0 errors,"
+assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
+	"Panel: ILI9488" \
+	'!spidev: ""'
+assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
+	"spidev: spidev1.0" \
+	"spidev: spidev0.1" \
+	"!spidev: /dev/"
+
+# The writer and reader must agree on the Display key. Emit a config, then load
+# the emitted file again: a "Module" emitter would leave the panel unset and the
+# reload would report Display.Module as unknown. The summary names each host from
+# its own field, so it also catches an emitter that swaps Display and Touchscreen.
+ROUNDTRIP_YAML="$WORKDIR/roundtrip.yaml"
+(cd "$WORKDIR" && timeout 60 "$BIN" --config "$FIXTURES/spidev-valid.yaml" --output-yaml -d "$WORKDIR/fs" 2>&1) |
+	awk '/^Lora:/{emit=1} emit' >"$ROUNDTRIP_YAML"
+roundtrip_out="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --check -d "$WORKDIR/fs" 2>&1)"
+roundtrip_rc=$?
+roundtrip_yaml="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --output-yaml -d "$WORKDIR/fs" 2>&1)"
+if [[ $roundtrip_rc -eq 0 ]] && ! grep -qF "unknown key 'Display.Module'" <<<"$roundtrip_out" &&
+	grep -qF "Display spidev    : /dev/spidev1.0" <<<"$roundtrip_out" &&
+	grep -qF "Touchscreen spidev: /dev/spidev0.1" <<<"$roundtrip_out" &&
+	grep -qF "Panel: ILI9488" <<<"$roundtrip_yaml" &&
+	grep -qF "Result: 0 errors" <<<"$roundtrip_out"; then
+	PASS=$((PASS + 1))
+	echo "  ok    emitted YAML reloads with Display.Panel and both SPI hosts"
+else
+	FAIL=$((FAIL + 1))
+	echo "  FAIL  emitted YAML reloads with Display.Panel and both SPI hosts"
+	sed 's/^/          | /' <<<"$roundtrip_out"
+	sed 's/^/          | /' <<<"$roundtrip_yaml"
+fi
 
 echo
 echo "across a config directory:"

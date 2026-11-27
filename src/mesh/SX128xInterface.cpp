@@ -121,11 +121,13 @@ template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) && defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
     if (res == RADIOLIB_ERR_NONE) {
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
+        noteRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
     }
 #elif ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE && portduino_config.lora_rxen_pin.pin != RADIOLIB_NC &&
         portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
         lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
+        noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #endif
 

@@ -1022,6 +1022,10 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
+#if GRAPHICS_TFT_COLORING_ENABLED
+        // and their colors: the message bubbles of the frame underneath stayed on a TFT
+        resetTFTColorRegions(display->getWidth(), display->getHeight());
+#endif
         display->setColor(WHITE);
         // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);

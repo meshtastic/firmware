@@ -573,7 +573,7 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ST7789_CS)
+#elif defined(ST7789_CS) || defined(ST7789P3_PANEL)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 #if defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)
 #include "chsc6x.h"
@@ -632,7 +632,11 @@ class TOUCH_CHSC6X : public ITouch
 #endif
 class LGFX : public lgfx::LGFX_Device
 {
+#if defined(ST7789P3_PANEL)
+    lgfx::Panel_ST7789P3 _panel_instance;
+#else
     lgfx::Panel_ST7789 _panel_instance;
+#endif
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 #if HAS_TOUCHSCREEN
@@ -1579,7 +1583,35 @@ void TFTDisplay::display()
         tft->setBrightness(172);
     }
 #else
-    display(false);
+    display(rotationRepaintPending);
+#endif
+    rotationRepaintPending = false;
+}
+
+void TFTDisplay::setQuarterTurns(uint8_t turns)
+{
+#if HAS_SCREEN_AUTO_ROTATE
+    turns &= 3;
+    if (turns == quarterTurns || tft == nullptr)
+        return;
+    concurrency::LockGuard g(spiLock);
+    quarterTurns = turns;
+    // The buffer keeps its size (w x h / 8 bytes either way); a quarter turn swaps its width and height
+    if (turns & 1)
+        setGeometry(GEOMETRY_RAWMODE, baseHeight, baseWidth);
+    else
+        setGeometry(GEOMETRY_RAWMODE, baseWidth, baseHeight);
+    memset(buffer, 0, displayBufferSize);
+#ifdef OLEDDISPLAY_DOUBLE_BUFFER
+    memset(buffer_back, 0, displayBufferSize);
+#endif
+    // A panel rotation step turns the picture a quarter turn clockwise: undo the device's turn
+    tft->setRotation((baseRotation + 4 - turns) & 3);
+    tft->fillScreen(getThemeDefaultOffColor());
+    rotationRepaintPending = true;
+    LOG_INFO("TFT: %u quarter turns, %ux%u", turns, displayWidth, displayHeight);
+#else
+    (void)turns;
 #endif
 }
 
@@ -2199,34 +2231,51 @@ bool TFTDisplay::connect()
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA) ||                        \
-    defined(SEEED_WIO_TRACKER_L2)
+    defined(SEEED_WIO_TRACKER_L2) || defined(SEEED_MESHPAGER_X2)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
     tft->fillScreen(getThemeDefaultOffColor());
+#if HAS_SCREEN_AUTO_ROTATE
+    // connect() runs again on a wake: the build's orientation is the first one, and a turned picture stays turned
+    if (baseWidth == 0) {
+        baseRotation = tft->getRotation();
+        baseWidth = displayWidth;
+        baseHeight = displayHeight;
+    } else if (quarterTurns != 0) {
+        tft->setRotation((baseRotation + 4 - quarterTurns) & 3);
+        rotationRepaintPending = true;
+    }
+#endif
+#if HAS_SCREEN_AUTO_ROTATE
+    // Rows as wide as the screen in either orientation
+    const uint32_t lineWidth = displayWidth > displayHeight ? displayWidth : displayHeight;
+#else
+    const uint32_t lineWidth = displayWidth;
+#endif
 
     if (this->linePixelBuffer == NULL) {
 #if defined(CO5300_CS)
-        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * 2);
+        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * lineWidth * 2);
 #else
-        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
+        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * lineWidth);
 #endif
 
         if (!this->linePixelBuffer) {
             LOG_ERROR("Not enough memory to create TFT line buffer");
             return false;
         }
-        memaudit::add("display", sizeof(uint16_t) * displayWidth);
+        memaudit::add("display", sizeof(uint16_t) * lineWidth);
     }
     if (this->repaintChunkBuffer == NULL) {
-        this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
+        this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * lineWidth * kFullRepaintChunkRows);
 
         if (!this->repaintChunkBuffer) {
             LOG_ERROR("Not enough memory to create TFT repaint chunk buffer");
             return false;
         }
-        memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
+        memaudit::add("display", sizeof(uint16_t) * lineWidth * kFullRepaintChunkRows);
     }
     return true;
 }

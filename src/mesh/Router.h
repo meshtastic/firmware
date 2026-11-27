@@ -66,6 +66,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
+    using PacketHistory::wasHeardFromSender;
+
+  public:
     /**
      * Constructor
      *
@@ -128,6 +131,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     {
         (void)p;
         return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    }
+
+    /// Router::send()'s hard duty-cycle gate: admits up to the whole duty cycle (exposed for tests).
+    static bool airUtilAllowsTx(float hourlyTxPercent, float effectiveDutyCycle)
+    {
+        return !(hourlyTxPercent > effectiveDutyCycle);
     }
 
     /**
@@ -199,6 +208,34 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * @return true if hop_limit should be decremented, false to preserve it
      */
     bool shouldDecrementHopLimit(const meshtastic_MeshPacket *p);
+
+    /**
+     * Makes a packet as it arrived over the air (still encrypted) the frame a relay forwards from, for this
+     * object's lifetime. Pass copy when the caller is about to decode that packet in place.
+     */
+    class ReceivedFrameScope
+    {
+      public:
+        ReceivedFrameScope(Router &r, const meshtastic_MeshPacket *frame, bool copy = false);
+        ~ReceivedFrameScope();
+        ReceivedFrameScope(const ReceivedFrameScope &) = delete;
+        ReceivedFrameScope &operator=(const ReceivedFrameScope &) = delete;
+
+      private:
+        Router &scopedRouter;
+        const meshtastic_MeshPacket *previous;
+        meshtastic_MeshPacket *owned = nullptr;
+    };
+
+    /**
+     * Give a relay copy the payload exactly as it was received, so send() forwards that ciphertext instead of
+     * re-encoding and re-encrypting the decoded packet. The copy stays decoded, to be encoded by send(), when the
+     * received frame is not available for this packet or its payload was updated after decoding.
+     */
+    void useReceivedPayload(meshtastic_MeshPacket *relay) const;
+
+    /// The received frame set by ReceivedFrameScope, or nullptr outside one.
+    const meshtastic_MeshPacket *receivedFrame = nullptr;
 
     /**
      * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to

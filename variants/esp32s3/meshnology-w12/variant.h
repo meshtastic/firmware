@@ -51,6 +51,18 @@
 #define LR2021_IRQ_DIO_NUM 8
 // DIO7 -> IO7 is a second, unused IRQ line. Plain crystal on XTA/XTB, so no TCXO voltage.
 
+// ─── GNSS (L76K header) ───────────────────────────────────────────────────────
+#define GPS_L76K
+#define GPS_RX_PIN 39 // bits going TOWARDS the CPU
+#define GPS_TX_PIN 38 // bits going TOWARDS the GPS
+#define PIN_GPS_EN 48 // CTRL, active low
+#define GPS_EN_ACTIVE LOW
+#define PIN_GPS_STANDBY 40 // WAKE: high forces wake, low allows sleep
+#define PIN_GPS_PPS 41
+#define PIN_GPS_RESET 42 // low >100 ms resets the L76K
+#define GPS_RESET_MODE LOW
+#define GPS_THREAD_INTERVAL 50
+
 // GC1109 supply: LR20x0Interface raises it before begin() and drops it in sleep(). The LDO
 // starts in about 30 us, and CSD only goes high once begin() has applied the switch table.
 #define LR2021_POWER_EN 4
@@ -67,4 +79,3 @@
 
 // ─── Not wired up yet ─────────────────────────────────────────────────────────
 // RGB LED on GPIO46 stays off: HAS_NEOPIXEL pulls in the RMT HAL, which fails to link here.
-// L76K GNSS header (RX=39, TX=38, CTRL=48 active low, WAKE=40, PPS=41, RST=42) is unpopulated.

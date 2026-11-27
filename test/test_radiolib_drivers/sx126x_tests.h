@@ -67,22 +67,22 @@ static void test_sx126x_packet_setters_send_packet_params()
     SX126X_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setPreambleLength(16));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCRC(2));
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS}) >= 2);
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count({RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS}));
 }
 
 static void test_sx126x_setSyncWord_writes_a_register()
 {
     SX126X_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setSyncWord(0x2B));
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_WRITE_REGISTER}) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_WRITE_REGISTER}));
 }
 
 static void test_sx126x_setOutputPower_sends_pa_config_and_tx_params()
 {
     SX126X_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setOutputPower(22));
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_PA_CONFIG}) >= 1);
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_TX_PARAMS}) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_PA_CONFIG}));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_TX_PARAMS}));
 }
 
 static void test_sx126x_mode_commands_reach_the_chip()
@@ -91,9 +91,10 @@ static void test_sx126x_mode_commands_reach_the_chip()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.standby());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startReceive());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.sleep());
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_STANDBY}) >= 1);
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_RX}) >= 1);
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX126X_CMD_SET_SLEEP}) >= 1);
+    // startReceive() stages RX through standby() as well, so the explicit call makes two.
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count({RADIOLIB_SX126X_CMD_SET_STANDBY}));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_RX}));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_SLEEP}));
 }
 
 // Grows here - each needs replies scripted per opcode, not just a status byte:
