@@ -4,6 +4,14 @@
 #include "detect/INA219Detection.h"
 #include "detect/ScanI2C.h"
 
+bool isFocalTechTouchId(uint8_t vendor, uint8_t chip)
+{
+    if (vendor == 0 || vendor == 0xFF || chip == 0 || chip == 0xFF)
+        return false;
+    // AHT10/AHT20/AHT21 return their status byte on any read; writing 0xA8 can flip bit 7 (BUSY), e.g. 0x18 vs 0x98.
+    return (vendor & 0x7F) != (chip & 0x7F);
+}
+
 #if !MESHTASTIC_EXCLUDE_I2C
 
 #include "concurrency/LockGuard.h"
@@ -573,11 +581,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #ifndef HAS_NCP5623
             case AHT10_ADDR: { // same as FocalTech FT6x06/FT6x36 touch controllers
-                // An AHT has no register map and answers every read with its status byte, so FocalTech ID registers
-                // (vendor 0xA8, chip 0xA3) that read back different values can only be a touch controller
-                uint8_t vendor = 0, chip = 0;
-                if (readByteRegister(i2cBus, addr.address, 0xA8, vendor) && vendor != 0 &&
-                    readByteRegister(i2cBus, addr.address, 0xA3, chip) && chip != vendor) {
+                // Probe 0xA3 (chip) before 0xA8 (vendor): 0xA8 is an AHT command that can toggle bit 7 (BUSY).
+                uint8_t chip = 0, vendor = 0;
+                if (readByteRegister(i2cBus, addr.address, 0xA3, chip) && chip != 0 && chip != 0xFF &&
+                    readByteRegister(i2cBus, addr.address, 0xA8, vendor) && isFocalTechTouchId(vendor, chip)) {
                     LOG_INFO("FocalTech touch (chip 0x%x, vendor 0x%x) at 0x%x, not an AHT10", chip, vendor,
                              (uint8_t)addr.address);
                     break;
