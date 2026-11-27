@@ -346,31 +346,37 @@ bool Channels::resolvePrimaryIndex()
     return hasPrimary;
 }
 
+bool Channels::ensurePrimary()
+{
+    // An empty table is filled later by initDefaults(): writing slot 0 now would write getByIndex()'s
+    // shared dummy channel, giving every out-of-range channel index a key
+    if (resolvePrimaryIndex() || channelFile.channels_count == 0)
+        return false;
+
+    // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
+    // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
+    if (primaryIndex < channelFile.channels_count && channelFile.channels[primaryIndex].has_settings &&
+        channelFile.channels[primaryIndex].role == meshtastic_Channel_Role_SECONDARY) {
+        channelFile.channels[primaryIndex].role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
+    } else {
+        // Promoting a DISABLED or settings-less slot would make a plaintext primary; restore the default
+        primaryIndex = 0;
+        initDefaultChannel(0);
+        // initDefaultChannel() leaves use_aead alone, and the default channel is not an AEAD one
+        channelFile.channels[0].settings.use_aead = false;
+    }
+    LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
+    return true;
+}
+
 void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
     // hashes through getKey(), which follows a keyless secondary to primaryIndex.
-    bool hasPrimary = resolvePrimaryIndex();
+    ensurePrimary();
 
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
-
-    // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
-    // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
-    if (!hasPrimary) {
-        meshtastic_Channel &stale = getByIndex(primaryIndex);
-        if (stale.role == meshtastic_Channel_Role_SECONDARY) {
-            stale.role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
-        } else {
-            // Promoting a DISABLED (zeroed) slot would make a plaintext primary; restore the default
-            primaryIndex = 0;
-            initDefaultChannel(0);
-        }
-        LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
-        // The key every keyless secondary resolves through just changed, so re-run the lot
-        for (int i = 0; i < channelFile.channels_count; i++)
-            fixupChannel(i);
-    }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
         LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately");
