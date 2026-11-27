@@ -113,6 +113,18 @@ template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &
 MessageStore::MessageStore(const std::string &label)
 {
     filename = "/Messages_" + label + "_v2.msgs";
+
+#ifdef FSCom
+    // Delete the old v1 message file if exists to free up flash memory
+    std::string oldFilename = "/Messages_" + label + ".msgs";
+    spiLock->lock();
+    if (FSCom.exists(oldFilename.c_str())) {
+        FSCom.remove(oldFilename.c_str());
+        LOG_INFO("Removed legacy message file: %s", oldFilename.c_str());
+    }
+    spiLock->unlock();
+#endif
+
     resetMessagePool(); // initialize text pool on boot
 }
 
