@@ -802,17 +802,19 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     // External Notification
     case TOGGLE_EXT_NOTIFICATION:
         moduleConfig.external_notification.enabled = !moduleConfig.external_notification.enabled;
-        applyConfigReload(SEGMENT_MODULECONFIG, true);
+        // Pins and input hooks are set up in the module's constructor only when enabled, so this needs a restart.
+        service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_REBOOT);
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         break;
 
     case TOGGLE_EXT_NOTIFICATION_MESSAGE_BUZZER:
         moduleConfig.external_notification.alert_message_buzzer = !moduleConfig.external_notification.alert_message_buzzer;
-        applyConfigReload(SEGMENT_MODULECONFIG);
+        service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
         break;
 
     case TOGGLE_EXT_NOTIFICATION_BELL_BUZZER:
         moduleConfig.external_notification.alert_bell_buzzer = !moduleConfig.external_notification.alert_bell_buzzer;
-        applyConfigReload(SEGMENT_MODULECONFIG);
+        service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
         break;
 
     case SET_BUZZER_MODE: {
@@ -821,7 +823,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         constexpr uint8_t optionCount = sizeof(BUZZER_MODE_LABELS) / sizeof(BUZZER_MODE_LABELS[0]);
         if (index < optionCount && config.device.buzzer_mode != (meshtastic_Config_DeviceConfig_BuzzerMode)index) {
             config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)index;
-            applyConfigReload(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
         break;
     }
