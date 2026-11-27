@@ -89,7 +89,10 @@ static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define HAS_SCREEN 1
-#define USE_SSD1306 1
+
+#define SCREEN_BRIGHTNESS_LEVEL_MEDIUM 100
+#define SCREEN_BRIGHTNESS_LEVEL_HIGH 160
+#define SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH 255
 
 // SPI Configuration (SX1262)
 #define SPI_INTERFACES_COUNT 1
@@ -124,6 +127,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT
 #define AREF_VOLTAGE 3.6
+#define OCV_ARRAY 4200, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 // We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
 #define NRF_APM
 
@@ -143,8 +147,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define GPS_TX_PIN D6 // P0.26 - This is data from the MCU
-#define GPS_RX_PIN D7 // P0.27 - This is data from the GNSS
+#define GPS_TX_PIN D6 // P0.27 - This is data from the MCU
+#define GPS_RX_PIN D7 // P0.26 - This is data from the GNSS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50

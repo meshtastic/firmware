@@ -19,6 +19,7 @@ struct PacketHistoryStruct {
     uint8_t channel;
     uint32_t reply_id;
     bool emoji;
+    bool xeddsa_signed; // verification verdict from receipt time; see preparePayload()'s `local` case
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
     int32_t rx_rssi;

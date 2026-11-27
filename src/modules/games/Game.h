@@ -35,7 +35,21 @@ class Game
     virtual int32_t tickIntervalMs() const = 0; // per-game speed curve
 
     // --- Input while PLAYING (the host handles the BACK-to-pause and menu keys) ---
-    virtual void handleInput(input_broker_event ev) = 0;
+    // The whole event, not just the action, because an action alone cannot answer everything a
+    // game needs to know:
+    //   - kbchar is a keystroke from a keyboard, or the physical gamepad button behind the action
+    //     (INPUT_BROKER_MSG_JOY_BUTTON_FIRST..LAST, see InputBroker.h), or 0 when the source has
+    //     nothing to add. Several buttons can share one action, so this is what lets a game act on
+    //     the button rather than the action, and use more inputs than SELECT and CANCEL.
+    //   - source names the driver that produced it. Two sources can send the same action with the
+    //     same (zero) kbchar, so this is the only thing that tells them apart -- Breakout needs it
+    //     to ignore the joystick's own D-pad repeats without also ignoring the keyboard.
+    // A game that only cares about the action just reads event->inputEvent.
+    virtual void handleInput(const InputEvent *event) = 0;
+
+    // While true, the host forwards BACK/CANCEL to handleInput() instead of using it to pause. Lets
+    // a game briefly claim that button (e.g. Breakout's "press B to serve" before the ball launches).
+    virtual bool wantsBackButton() const { return false; }
 
     // --- Rendering (the host draws the shared PAUSED / GAME OVER / HIGH SCORES chrome) ---
     virtual void drawAttract(OLEDDisplay *display, int16_t x, int16_t y) = 0; // title/art + hi + hint

@@ -67,7 +67,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
                 // Drain in one pass: releasing the button would discard anything left over.
                 // Exchange, so a detent arriving from the ISR mid-drain is not lost.
                 int32_t pending = pressAndTurnDelta.exchange(0, std::memory_order_relaxed);
-                LOG_DEBUG("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
+                LOG_INPUT("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
                 while (pending != 0) {
                     bool cw = pending > 0;
                     InputEvent turn = {};
@@ -85,12 +85,12 @@ int32_t RotaryEncoderInterruptBase::runOnce()
                 // released -> if short press, send short, else already sent long
                 if (!pressAndTurnFired && duration < LONG_PRESS_DURATION && now - lastPressKeyTime >= pressDebounceMs) {
                     lastPressKeyTime = now;
-                    LOG_DEBUG("Rotary event Press short");
+                    LOG_INPUT("Rotary event Press short");
                     e.inputEvent = this->_eventPressed;
                 } else if (pressAndTurnEnabled() && !pressAndTurnFired && duration >= LONG_PRESS_DURATION &&
                            this->_eventPressedLong != INPUT_BROKER_NONE) {
                     // Held long enough and no turn came, so the long press stands
-                    LOG_DEBUG("Rotary event Press long");
+                    LOG_INPUT("Rotary event Press long");
                     e.inputEvent = this->_eventPressedLong;
                 }
                 pressDetected = false;
@@ -103,15 +103,15 @@ int32_t RotaryEncoderInterruptBase::runOnce()
                        this->_eventPressedLong != INPUT_BROKER_NONE && lastPressLongEventTime == 0) {
                 // fire single-shot long press; press-and-turn encoders defer this to release
                 lastPressLongEventTime = now;
-                LOG_DEBUG("Rotary event Press long");
+                LOG_INPUT("Rotary event Press long");
                 e.inputEvent = this->_eventPressedLong;
             }
         }
     } else if (this->action == ROTARY_ACTION_CW) {
-        LOG_DEBUG("Rotary event CW");
+        LOG_INPUT("Rotary event CW");
         e.inputEvent = this->_eventCw;
     } else if (this->action == ROTARY_ACTION_CCW) {
-        LOG_DEBUG("Rotary event CCW");
+        LOG_INPUT("Rotary event CCW");
         e.inputEvent = this->_eventCcw;
     }
 

@@ -13,6 +13,7 @@
 #endif
 #endif
 #if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+#include "mesh/eth/ethBoundedClient.h"
 #include <EthernetClient.h>
 #endif
 
@@ -58,6 +59,9 @@ class MQTT : private concurrency::OSThread
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
     bool isUsingDefaultRootTopic() { return isConfiguredForDefaultRootTopic; }
 
+    /** Point the root topic at the current region on the default broker. Returns true if it rewrote it. */
+    static bool applyRegionRootTopic(const char *regionName);
+
     /// Validate the meshtastic_ModuleConfig_MQTTConfig.
     static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
 
@@ -83,6 +87,8 @@ class MQTT : private concurrency::OSThread
     using MQTTClientTLS = WiFiClientSecure;
 #define MQTT_SUPPORTS_TLS 1
 #endif
+#elif HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+    using MQTTClient = BoundedEthernetClient;
 #elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
 #else

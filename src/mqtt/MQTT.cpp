@@ -177,11 +177,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         p->channel = ch.index;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
-        // signature policy here: verify a carried signature and apply unsigned-downgrade
-        // protection for known signers. Without this, a peer on a plaintext broker could
-        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
-        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
-        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        // signature policy here: verify a carried signature, and in Strict drop an unsigned one.
+        // Without this, a peer on a plaintext broker could forge a signed node's packets. Hold
+        // cryptLock like the RF path (perhapsDecode) does - checkXeddsaReceivePolicy ->
+        // xeddsa_verify mutates shared CryptoEngine cache state, and MQTT ingress can run on a
+        // different task.
         if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
             LOG_INFO("Ignore decoded msg failing XEdDSA policy");
             return;
@@ -247,9 +247,22 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+// "msh/<region>" is what the default broker's convention produces; any other suffix is the user's own.
+bool isRegionRootTopic(const char *root)
+{
+    const size_t prefixLen = strlen(default_mqtt_root) + 1;
+    if (strncmp(root, default_mqtt_root "/", prefixLen) != 0)
+        return false;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++)
+        if (strcmp(r->name, root + prefixLen) == 0)
+            return true;
+    return false;
+}
+
+// The regional roots count as default: they are what a region change writes on the default broker.
 bool isDefaultRootTopic(const String &root)
 {
-    return root.length() == 0 || root == default_mqtt_root;
+    return root.length() == 0 || root == default_mqtt_root || isRegionRootTopic(root.c_str());
 }
 
 struct PubSubConfig {
@@ -364,6 +377,19 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
     }
 
     onReceiveProto(topic, payload, length);
+}
+
+bool MQTT::applyRegionRootTopic(const char *regionName)
+{
+    // The region suffix is a convention of the default broker; a regional broker is regional already.
+    auto [host, parsedPort] = parseHostAndPort(moduleConfig.mqtt.address);
+    (void)parsedPort;
+    if (!isDefaultServer(host))
+        return false;
+    if (!isDefaultRootTopic(moduleConfig.mqtt.root))
+        return false; // the user picked their own root
+    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, regionName);
+    return true;
 }
 
 void mqttInit()
@@ -649,6 +675,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->type = meshtastic_ClientNotification_NotificationType_MQTT_SERVER_UNREACHABLE;
                     cn->time = getValidTime(RTCQualityFromNet);
                     strncpy(cn->message, warning, sizeof(cn->message) - 1);
                     cn->message[sizeof(cn->message) - 1] = '\0';
@@ -665,6 +692,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_PROXY_TO_CLIENT_REQUIRED;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
@@ -683,6 +711,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_DEFAULT_SERVER_PORT_INVALID;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
@@ -756,11 +785,16 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     LOG_DEBUG("MQTT onSend - Publish ");
     const meshtastic_MeshPacket *p;
+    meshtastic_MeshPacket *coerced = nullptr;
     if (moduleConfig.mqtt.encryption_enabled) {
         p = &mp_encrypted;
         LOG_DEBUG("encrypted message");
     } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         p = &mp_decoded;
+        // A signed payload is published as sent: a coerced copy would no longer verify at downlink gateways.
+        if (mp_decoded.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp_decoded.decoded.xeddsa_signature.size == 0 &&
+            (coerced = packetPool.allocCopy(mp_decoded, 0)) && coerceNodeInfoUserId(*coerced))
+            p = coerced;
         LOG_DEBUG("portnum %i message", mp_decoded.decoded.portnum);
     } else {
         LOG_DEBUG("nothing, pkt not decrypted");
@@ -774,6 +808,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                                             .channel_id = const_cast<char *>(channelId),
                                             .gateway_id = const_cast<char *>(nodeId.c_str())};
     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (coerced)
+        packetPool.release(coerced);
     if (topicRoot != moduleConfig.mqtt.root)
         reinitTopics(); // root changed before runOnce() noticed
     std::string topic = cryptTopic + channelId + "/" + nodeId;

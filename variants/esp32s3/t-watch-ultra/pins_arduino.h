@@ -60,7 +60,6 @@ static const uint8_t SCK = 35;
 
 #define GPS_TX (TX)
 #define GPS_RX (RX)
-#define GPS_PPS (13)
 
 #define TP_SDA (SDA)
 #define TP_SCL (SCL)

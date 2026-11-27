@@ -8,6 +8,13 @@
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
 #include "graphics/driver/DisplayDriverConfig.h"
+#if HAS_MUI_MIRROR
+#include "NodeDB.h"
+#include "graphics/DisplayMirror.h"
+#include "graphics/ScreenMirror.h"
+#include "input/InputBroker.h"
+#include "lvgl.h"
+#endif
 #include "util/ISpiLock.h"
 
 #ifdef ARCH_PORTDUINO
@@ -19,13 +26,13 @@
 #endif
 
 #ifdef SENSECAP_INDICATOR
-#include "graphics/map/RemoteSDService.h"
 #include "input/I2CKeyboardScanner.h"
 #include "mesh/IndicatorSerial.h"
 #include "mesh/comms/I2CProxy.h"
+#include "storage/RemoteStorage.h"
 
-// Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
-// over the interdevice link.
+// Serves the UI storage (map tiles, key backups) from the SD card behind the
+// RP2040, chunk-wise over the interdevice link.
 //
 // Retry policy: a lost frame (timeout) and a co-processor busy with card
 // maintenance (FILE_BUSY) are transient, so they are retried; a request the
@@ -280,10 +287,13 @@ class ReentrantSpiLock : public ISpiLock
             depth++;
             return true;
         }
-        bool result = spiLock->lock(timeout);
+        // A timed-out take holds nothing: claiming ownership anyway would let this thread's next
+        // lock() skip the real acquire, and its unlock() release a bus it never held.
+        if (!spiLock->lock(timeout))
+            return false;
         owner = self;
         depth = 1;
-        return result;
+        return true;
     }
 
     void unlock(void) override
@@ -311,6 +321,76 @@ class ReentrantSpiLock : public ISpiLock
 
 static ReentrantSpiLock reentrantSpiLock;
 
+#if HAS_MUI_MIRROR
+namespace graphics
+{
+// MUI builds have no BaseUI `screen`, so the logical (rotated) geometry comes from LVGL.
+bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
+{
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
+        return false;
+    lv_display_t *disp = lv_display_get_default();
+    if (!disp)
+        return false;
+    width = (uint16_t)lv_display_get_horizontal_resolution(disp);
+    height = (uint16_t)lv_display_get_vertical_resolution(disp);
+#if HAS_TOUCHSCREEN
+    hasTouch = true;
+#else
+    hasTouch = false;
+#endif
+    return width > 0 && height > 0;
+}
+
+// Broker and LVGL key codes disagree (LEFT/RIGHT are swapped), so map by name.
+bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
+{
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
+        return false;
+
+    // arrows go in as D-pad keys; device-ui's input policy decides focus traversal per context
+    switch (eventCode) {
+    case INPUT_BROKER_UP:
+        DisplayMirror::injectKey(LV_KEY_UP);
+        break;
+    case INPUT_BROKER_DOWN:
+        DisplayMirror::injectKey(LV_KEY_DOWN);
+        break;
+    case INPUT_BROKER_LEFT:
+        DisplayMirror::injectKey(LV_KEY_LEFT);
+        break;
+    case INPUT_BROKER_RIGHT:
+        DisplayMirror::injectKey(LV_KEY_RIGHT);
+        break;
+    case INPUT_BROKER_SELECT:
+        // with coordinates this is a touch long-press, as the physical touch driver emits it
+        if (touchX || touchY)
+            DisplayMirror::injectLongPress(touchX, touchY);
+        else
+            DisplayMirror::injectKey(LV_KEY_ENTER);
+        break;
+    case INPUT_BROKER_SELECT_LONG:
+        DisplayMirror::injectLongPressKey(LV_KEY_ENTER);
+        break;
+    case INPUT_BROKER_USER_PRESS:
+        DisplayMirror::injectTouch(touchX, touchY);
+        break;
+    case INPUT_BROKER_BACK:
+    case INPUT_BROKER_CANCEL:
+        DisplayMirror::injectKey(LV_KEY_ESC);
+        break;
+    default:
+        if (kbChar)
+            DisplayMirror::injectKey(kbChar);
+        else
+            return false;
+        break;
+    }
+    return true;
+}
+} // namespace graphics
+#endif
+
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
@@ -323,7 +403,7 @@ void tft_task_handler(void *param = nullptr)
 void tftSetup(void)
 {
 #ifdef SENSECAP_INDICATOR
-    RemoteSDService::setBackend(new IndicatorRemoteFS());
+    RemoteStorage::setBackend(new IndicatorRemoteFS());
     // the second bus is bridged to the RP2040, keep the keyboard scan off the
     // uninitialized local Wire1
     I2CKeyboardScanner::setSecondaryBus(i2cProxy);
@@ -417,6 +497,19 @@ void tftSetup(void)
 #endif
 
     if (deviceScreen) {
+#if HAS_MUI_MIRROR
+        // LVGL is up and the UI task has not started, which DisplayMirror::start needs
+        DisplayMirror::start(deviceScreen->getDisplayDriver());
+        {
+            lv_display_t *disp = lv_display_get_default();
+            graphics::screenMirror.setMuiSource(
+                []() { DisplayMirror::requestFullRefresh(); }, disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
+                disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0, DisplayMirror::pixelsByteSwapped());
+        }
+        DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px, uint16_t stride) {
+            graphics::screenMirror.onMuiRect(x, y, w, h, px, stride);
+        });
+#endif
 #ifdef ARCH_ESP32
         if (!tftSleepObserver) {
             tftSleepObserver = new CallbackObserver<DeviceScreen, void *>(deviceScreen, &DeviceScreen::prepareSleep);

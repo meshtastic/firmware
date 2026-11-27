@@ -16,7 +16,7 @@ jobs:
       github.event.workflow_run.conclusion != 'cancelled' &&
       github.repository == 'meshtastic/firmware'
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       # Per-board manifests carry the firmware's own metadata (activelySupported,
       # displayName, ...) generated from each target's custom_meshtastic_* config.

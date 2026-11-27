@@ -1,3 +1,9 @@
+// TrafficManagementModule dedup, rate limits, hop trimming and NodeInfo replies.
+//
+// Why: these gates decide which traffic is seen and answered when the mesh is busy.
+// Regression guarded: a rate/dedup window that never expires, a hop trim applied to a
+// unicast, or a NodeInfo reply outside the role's hop ceiling.
+
 #include "MeshTypes.h" // Include BEFORE TestUtil.h - provides HAS_TRAFFIC_MANAGEMENT (via mesh-pb-constants.h)
 #include "TestUtil.h"
 #include <cstdlib>
@@ -36,27 +42,6 @@ constexpr NodeNum kTargetNode = 0x33333333;
 // requesting packet's `from`, so tests that exercise the per-target / fallback / sweep throttles use
 // a fresh requester for their "served again" step to avoid the per-requester window masking them.
 constexpr NodeNum kRemoteNode2 = 0x44444444;
-
-// INERT - commented out, not deleted. TrafficManagementModule holds no reference to airTime:
-// the gating this described went with exhaust_hop_telemetry / exhaust_hop_position, and
-// shouldExhaustHops() is now a compare of three members nothing sets. Writing the buckets did not
-// work either - the first accessor call takes AirTime's firstTime branch and memsets them, so this
-// reported 0%, not 100%. A revived version must fill them via logAirtime(); they are private now.
-//
-// class ScopedBusyAirTime
-// {
-//   public:
-//     ScopedBusyAirTime() : previous(airTime)
-//     {
-//         busy.logAirtime(RX_ALL_LOG, CHANNEL_UTILIZATION_PERIODS * 10 * 1000); // a full window
-//         airTime = &busy;
-//     }
-//     ~ScopedBusyAirTime() { airTime = previous; }
-//
-//   private:
-//     AirTime busy;
-//     AirTime *previous;
-// };
 
 class MockNodeDB : public NodeDB
 {
@@ -175,14 +160,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // Router allocates a global crypt lock in its constructor.
-        // Clean it up here so each test can build a fresh mock router.
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -196,7 +173,6 @@ class MockRouter : public Router
 class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
-    using TrafficManagementModule::alterReceived;
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
@@ -298,12 +274,6 @@ static meshtastic_MeshPacket makePositionPacketWithPrecision(NodeNum from, int32
     packet.decoded.payload.size =
         pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
     return packet;
-}
-
-static bool decodePositionPayload(const meshtastic_MeshPacket &packet, meshtastic_Position &out)
-{
-    out = meshtastic_Position_init_zero;
-    return pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &out);
 }
 
 // Primary channel with a well-known single-byte PSK and the (empty -> preset)
@@ -541,27 +511,49 @@ static void test_tm_localDestination_bypassesTransitFilters(void)
 }
 
 /**
- * Verify router role clamps NodeInfo response hops to router-safe maximum.
- * Important so large config values cannot widen response scope unexpectedly.
+ * Verify router role clamps NodeInfo response hops to router-safe maximum (1), even with a
+ * configured maximum of 10. Important so large config values cannot widen response scope.
+ * The target is made servable (observed, key-proven, router wired) so the hop clamp is the
+ * only gate that can refuse the out-of-range request; the in-range request proves it is served.
  */
 static void test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
-    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
 
     TrafficManagementModuleTestShim module;
-    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
-    request.decoded.want_response = true;
-    request.hop_start = 5;
-    request.hop_limit = 1; // 4 hops away; router clamp should cap max at 1
+    meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(observed)));
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
-    ProcessMessage result = module.handleReceived(request);
-    meshtastic_TrafficManagementStats stats = module.getStats();
+    meshtastic_MeshPacket tooFar = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    tooFar.decoded.want_response = true;
+    tooFar.id = 0x13572468;
+    tooFar.hop_start = 5;
+    tooFar.hop_limit = 1; // 4 hops away: past the router cap of 1
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(tooFar)));
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    meshtastic_MeshPacket inRange = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    inRange.decoded.want_response = true;
+    inRange.id = 0x13572469;
+    inRange.hop_start = 5;
+    inRange.hop_limit = 4;     // 1 hop away: at the cap
+    inRange.relay_node = 0x42; // a relayer is present, so the no-relayer guard does not fire
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(inRange)));
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 /**
@@ -764,14 +756,18 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
 
 /**
  * A unicast NodeInfo request is never signed, so a known signer's identity claim on the
- * direct-response path is unauthenticated. It must not overwrite the stored name (spoofing
- * defense), while the direct response itself still goes out. The non-signer case
- * (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it still learns.
+ * direct-response path is unauthenticated. Under Balanced (and Strict) it must not overwrite the
+ * stored name (spoofing defense), while the direct response itself still goes out. The
+ * non-signer case (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it
+ * still learns. Compatible deliberately allows the write; see
+ * test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo.
  */
 static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->setCachedNode(kTargetNode); // the direct-response target
     // Signed-only replay gate (default) requires the target be a known signer to be served.
     mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
@@ -805,27 +801,48 @@ static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
 }
 
 /**
- * Verify client role only answers direct (0-hop) NodeInfo requests.
- * Important so clients do not answer relayed requests outside intended scope.
+ * Verify client role only answers direct (0-hop) NodeInfo requests, even with a configured
+ * maximum of 10. Important so clients do not answer relayed requests outside intended scope.
+ * The target is made servable (observed, key-proven, router wired) so the hop clamp is the
+ * only gate that can refuse the out-of-range request; the in-range request proves it is served.
  */
 static void test_tm_nodeinfo_clientClamp_skipsWhenNotDirect(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
-    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
 
     TrafficManagementModuleTestShim module;
-    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
-    request.decoded.want_response = true;
-    request.hop_start = 2;
-    request.hop_limit = 1; // 1 hop away; clients are clamped to max 0
+    meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(observed)));
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
-    ProcessMessage result = module.handleReceived(request);
-    meshtastic_TrafficManagementStats stats = module.getStats();
+    meshtastic_MeshPacket tooFar = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    tooFar.decoded.want_response = true;
+    tooFar.id = 0x13572468;
+    tooFar.hop_start = 2;
+    tooFar.hop_limit = 1; // 1 hop away: clients are clamped to 0
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(tooFar)));
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    meshtastic_MeshPacket inRange = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    inRange.decoded.want_response = true;
+    inRange.id = 0x13572469;
+    inRange.hop_start = 3;
+    inRange.hop_limit = 3; // direct
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(inRange)));
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 /**
@@ -918,6 +935,53 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
 }
 
 /**
+ * A signed NodeInfo request comes from a node running Balanced or Strict, which may drop an unsigned
+ * reply - and a cached reply sent on the target's behalf can never be signed, since only the target
+ * holds its key. So the request must be forwarded to the target rather than answered and consumed
+ * here. The previous test is the control: the same request unsigned is answered from cache. If this
+ * fails, Strict requesters behind a direct-response router never get a NodeInfo reply at all.
+ */
+static void test_tm_nodeinfo_directResponse_signedRequestForwarded(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+    module.markKeyXeddsaSignedForTest(kTargetNode); // servable, so only the signature can stop the reply
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x24681358;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    memset(request.decoded.xeddsa_signature.bytes, 0x5C, XEDDSA_SIGNATURE_SIZE);
+
+    ProcessMessage result = module.handleReceived(request);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Control, after the signed request so it cannot have throttled it: the same request unsigned is
+    // answered from cache, proving the signature alone caused the forward above.
+    meshtastic_MeshPacket unsignedRequest = request;
+    unsignedRequest.id = 0x24681359;
+    unsignedRequest.decoded.xeddsa_signature.size = 0;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(unsignedRequest)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
  * Verify NodeInfo cache misses do not fall back to NodeDB.
  * Important so the dedicated cache index stays logically separate from
  * NodeInfoModule/NodeDB when the cache is available.
@@ -927,6 +991,8 @@ static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(voi
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->setCachedNode(kTargetNode);
+    // Key-proven, so the NodeDB fallback would serve it: only the no-fallback guard can refuse.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1152,12 +1218,15 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
  * impersonatable. An attacker can forge an unsigned NodeInfo carrying the signer's real
  * (public!) key - it passes the key pin and would inherit warm XEdDSA-signed provenance - so the
  * gate must classify warm-tier signers, not only hot-store ones. A signature-verified frame
- * (control) is still learned.
+ * (control) is still learned. The gate applies under Balanced and Strict; Compatible
+ * deliberately accepts unsigned identity (test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo).
  */
 static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->clearCachedNode();
     mockNodeDB->rollHotStore(); // hot store misses; only the warm tier knows the signer
     uint8_t warmKey[32];
@@ -1189,6 +1258,63 @@ static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
     TEST_ASSERT_EQUAL_STRING("genuine", out.long_name);
 
     mockNodeDB->warmStore.clear();
+}
+
+// Shared body for the two cases where an unsigned NodeInfo from a known (warm-tier) signer must
+// be cached: the identity gate above does not apply, so the frame drives the cache like any other.
+static void expectUnsignedSignerNodeInfoCached()
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    uint8_t warmKey[32];
+    memset(warmKey, 0x5A, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket unsignedFrame = makeNodeInfoPacketWithKey(kTargetNode, "renamed", 0x5A);
+    unsignedFrame.xeddsa_signed = false;
+    module.handleReceived(unsignedFrame);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE_MESSAGE(module.copyUser(kTargetNode, out, nullptr), "unsigned NodeInfo must be cached here");
+    TEST_ASSERT_EQUAL_STRING("renamed", out.long_name);
+
+    mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Compatible does not sign and does not require signatures, even from known signers: firmware
+ * before 2.8 strips signatures when relaying, so an unsigned NodeInfo from a signer is normal
+ * there and must still update its identity. If this fails, Compatible has started refusing
+ * unsigned identity again and signers' names freeze behind every older relay.
+ */
+static void test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    expectUnsignedSignerNodeInfoCached();
+}
+
+/**
+ * An AES-CCM channel overrides the signature policy: its packets are never signed, and the CCM
+ * tag authenticates them, so even under Balanced an unsigned NodeInfo heard there updates a known
+ * signer's identity. If this fails, a node's name freezes as soon as it talks only on a CCM channel.
+ */
+static void test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    channelFile.channels[0].settings.use_aead = true;
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+    expectUnsignedSignerNodeInfoCached();
 }
 
 // Bit positions returned by peekNodeInfoFlagsForTest().
@@ -1410,7 +1536,9 @@ static void test_tm_nodeinfo_updateUserHook_writesThrough(void)
     TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_STRING("committed", out.long_name);
 
-    // ...but known-not-heard is never servable.
+    // ...but known-not-heard is never servable. Prove the key first, so the replay gate cannot
+    // be what refuses it and only the never-observed check is left.
+    module.markKeyXeddsaSignedForTest(kTargetNode);
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
     request.hop_start = 3;
@@ -2419,55 +2547,6 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
 #endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 
 /**
- * Verify relayed telemetry broadcasts are NOT hop-exhausted.
- * exhaust_hop_telemetry / exhaust_hop_position have been removed from the config
- * as "not suitable right now" - alterReceived must leave hop_limit unchanged.
- */
-static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
-{
-    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime
-    TrafficManagementModuleTestShim module;
-    meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
-    packet.hop_start = 5;
-    packet.hop_limit = 3;
-
-    module.alterReceived(packet);
-    meshtastic_TrafficManagementStats stats = module.getStats();
-
-    TEST_ASSERT_EQUAL_UINT8(3, packet.hop_limit); // unchanged
-    TEST_ASSERT_EQUAL_UINT8(5, packet.hop_start); // unchanged
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(packet));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
-}
-
-/**
- * Verify alterReceived does not modify unicast or local-origin packets.
- * The precision clamp (the only active alterReceived path) only fires for
- * broadcast position packets from remote nodes - these should be untouched.
- */
-static void test_tm_alterReceived_skipsLocalAndUnicast(void)
-{
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket unicast = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, kTargetNode);
-    unicast.hop_start = 5;
-    unicast.hop_limit = 3;
-    module.alterReceived(unicast);
-    TEST_ASSERT_EQUAL_UINT8(3, unicast.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(unicast));
-
-    meshtastic_MeshPacket fromUs = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kLocalNode, NODENUM_BROADCAST);
-    fromUs.hop_start = 5;
-    fromUs.hop_limit = 3;
-    module.alterReceived(fromUs);
-    TEST_ASSERT_EQUAL_UINT8(3, fromUs.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(fromUs));
-
-    meshtastic_TrafficManagementStats stats = module.getStats();
-    TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
-}
-
-/**
  * Verify position dedup window expires and later duplicates are allowed.
  * Important so periodic identical reports can resume after cooldown.
  */
@@ -2546,29 +2625,6 @@ static void test_tm_positionDedup_intervalZero_neverDrops(void)
 }
 
 /**
- * Verify precision values above 32 fall back to default precision.
- * Important so invalid config uses the documented default behavior.
- */
-static void test_tm_positionDedup_precisionAbove32_usesDefaultPrecision(void)
-{
-    // Channel precision=99 is out of range; sanitizePositionPrecision falls back to default (19 bits).
-    moduleConfig.traffic_management.position_min_interval_secs = 300;
-    installWellKnownPrimaryChannelWithPrecision(99);
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 384221234, -1210845678);
-
-    ProcessMessage r1 = module.handleReceived(first);
-    ProcessMessage r2 = module.handleReceived(second);
-    meshtastic_TrafficManagementStats stats = module.getStats();
-
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
-}
-
-/**
  * Verify the dedup fingerprint does not collapse positions that are distinct at the
  * channel's *effective* precision. Dedup only runs on well-known (public) channels,
  * where precision is capped at MAX_POSITION_PRECISION_PUBLIC_KEY (15) regardless of the
@@ -2596,8 +2652,10 @@ static void test_tm_positionDedup_distinctAtClampedChannelPrecision(void)
 
 /**
  * Verify channel precision=0 (no channel ceiling set) falls back to the firmware
- * default precision (19 bits / ~90 m cells). Positions more than one default grid
- * cell apart must remain distinct, not collapse into one fingerprint.
+ * default precision, default_traffic_mgmt_position_precision_bits (19 bits, 2^13-unit cells).
+ * Base is 2^17-aligned, so the two pairs below separate 19 from every other precision:
+ * base+100 / base+8000 share a 19-bit cell (dropped; finer precision would split them), and
+ * base+100 / base+8292 sit in adjacent 19-bit cells that every coarser precision would merge.
  */
 static void test_tm_positionDedup_precisionZero_channelFallsBackToDefault(void)
 {
@@ -2606,16 +2664,20 @@ static void test_tm_positionDedup_precisionZero_channelFallsBackToDefault(void)
     installWellKnownPrimaryChannelWithPrecision(0);
     TrafficManagementModuleTestShim module;
 
-    meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket second = makePositionPacket(kRemoteNode, 384221234, -1210845678);
+    constexpr int32_t kBase = 374210560; // 0x164E0000
+    constexpr int32_t kLon = -1220845678;
 
-    ProcessMessage r1 = module.handleReceived(first);
-    ProcessMessage r2 = module.handleReceived(second);
-    meshtastic_TrafficManagementStats stats = module.getStats();
+    meshtastic_MeshPacket sameCellA = makePositionPacket(kRemoteNode, kBase + 100, kLon);
+    meshtastic_MeshPacket sameCellB = makePositionPacket(kRemoteNode, kBase + 8000, kLon);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(sameCellA)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(sameCellB)));
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r2));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.position_dedup_drops);
+    meshtastic_MeshPacket nextCellA = makePositionPacket(kRemoteNode2, kBase + 100, kLon);
+    meshtastic_MeshPacket nextCellB = makePositionPacket(kRemoteNode2, kBase + 8192 + 100, kLon);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(nextCellA)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(nextCellB)));
+
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().position_dedup_drops);
 }
 
 /**
@@ -2739,93 +2801,6 @@ static void test_tm_unknownPackets_thresholdAbove255_clamps(void)
 }
 
 /**
- * Verify relayed position broadcasts are NOT hop-exhausted.
- * exhaust_hop_position has been removed - alterReceived must leave hop_limit unchanged.
- */
-static void test_tm_alterReceived_positionBroadcast_hopLimitUnchanged(void)
-{
-    TrafficManagementModuleTestShim module;
-    meshtastic_MeshPacket packet = makePositionPacket(kRemoteNode, 374221234, -1220845678, NODENUM_BROADCAST);
-    packet.hop_start = 5;
-    packet.hop_limit = 2;
-
-    module.alterReceived(packet);
-    meshtastic_TrafficManagementStats stats = module.getStats();
-
-    TEST_ASSERT_EQUAL_UINT8(2, packet.hop_limit); // unchanged
-    TEST_ASSERT_EQUAL_UINT8(5, packet.hop_start); // unchanged
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(packet));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
-}
-/**
- * Verify alterReceived ignores undecoded/encrypted packets.
- * Important so we never mutate packets that were not decoded by this module.
- */
-static void test_tm_alterReceived_skipsUndecodedPackets(void)
-{
-    TrafficManagementModuleTestShim module;
-    meshtastic_MeshPacket packet = makeUnknownPacket(kRemoteNode, NODENUM_BROADCAST);
-    packet.hop_start = 5;
-    packet.hop_limit = 3;
-
-    module.alterReceived(packet);
-    meshtastic_TrafficManagementStats stats = module.getStats();
-
-    TEST_ASSERT_EQUAL_UINT8(5, packet.hop_start);
-    TEST_ASSERT_EQUAL_UINT8(3, packet.hop_limit);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(packet));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
-}
-
-/**
- * Verify shouldExhaustHops() always returns false - exhaust_hop_* features are
- * removed, so the exhaustRequested flag is never set.
- * Guards against accidental re-enablement without updating the flag logic.
- */
-static void test_tm_alterReceived_exhaustFlagAlwaysFalse(void)
-{
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket telemetry = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
-    telemetry.hop_start = 5;
-    telemetry.hop_limit = 3;
-    module.alterReceived(telemetry);
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(telemetry));
-
-    meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
-    ProcessMessage result = module.handleReceived(text);
-    meshtastic_TrafficManagementStats stats = module.getStats();
-
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(telemetry));
-    TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
-}
-
-/**
- * Verify shouldExhaustHops() returns false for any packet regardless of from/id.
- * Since exhaust is removed, the from+id scope check is moot - this guards that
- * the always-false invariant holds across multiple distinct packets.
- */
-static void test_tm_alterReceived_exhaustFlag_isPacketScoped(void)
-{
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket p1 = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
-    p1.id = 0x1010;
-    p1.hop_start = 5;
-    p1.hop_limit = 3;
-    module.alterReceived(p1);
-
-    meshtastic_MeshPacket p2 = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kTargetNode, NODENUM_BROADCAST);
-    p2.id = 0x2020;
-    p2.hop_start = 4;
-    p2.hop_limit = 0;
-
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(p1));
-    TEST_ASSERT_FALSE(module.shouldExhaustHops(p2));
-}
-
-/**
  * Verify runOnce() returns sleep-forever interval when has_traffic_management is false.
  * TMM has no runtime enable flag - the presence bit is the only runtime gate.
  */
@@ -2946,12 +2921,12 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
 /**
  * Verify TRACKER role caps the dedup window at 1 hour.
- * A duplicate position that would normally be blocked for 5 h (default) must
+ * A duplicate position that would normally be blocked for 6 h (default) must
  * be forwarded once the 1-hour tracker cap expires.
  */
 static void test_tm_trackerRole_capsDedupWindowAtOneHour(void)
 {
-    // Operator interval is 5 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -3012,11 +2987,11 @@ static void test_tm_takTrackerRole_capsDedupWindowAtOneHour(void)
  * hot and warm NodeDB stores - the TMM unified cache is the third fallback. The
  * role is cached on the entry while NodeDB still knows the node; once NodeDB
  * forgets it (getNodeRole → CLIENT), the cached role must keep the 1-hour cap
- * applied instead of reverting to the 5-hour default interval.
+ * applied instead of reverting to the 6-hour default interval.
  */
 static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
 {
-    // Operator interval is 5 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -3036,8 +3011,8 @@ static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
     mockNodeDB->clearCachedNode();
 
     ProcessMessage r2 = module.handleReceived(dup); // within 1-hour cap - still drop
-    // Advance past the tracker cap (3600 s) but stay well under the 5-hour default.
-    // Without the cached-role fallback this would still be inside the 5-hour window
+    // Advance past the tracker cap (3600 s) but stay well under the 6-hour default.
+    // Without the cached-role fallback this would still be inside the 6-hour window
     // (CLIENT → no exception) and wrongly drop; with it, the 1-hour cap lets it pass.
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     ProcessMessage r3 = module.handleReceived(afterCap);
@@ -3075,7 +3050,7 @@ static void test_tm_roleChange_viaNodeInfo_dropsTrackerException(void)
     meshtastic_MeshPacket info = makeNodeInfoPacketWithRole(kRemoteNode, meshtastic_Config_DeviceConfig_Role_CLIENT);
     module.handleReceived(info);
 
-    // Past the 1-hour tracker cap but within the 5-hour CLIENT interval. With the stale
+    // Past the 1-hour tracker cap but within the 6-hour CLIENT interval. With the stale
     // TRACKER role this would pass; after the demotion it must drop (full interval applies).
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -3182,12 +3157,12 @@ static void test_tm_trackerRole_doesNotLengthenShorterOperatorInterval(void)
 
 /**
  * Verify LOST_AND_FOUND role caps duplicate-position dedup at ~15 min (2 pos-ticks),
- * not the old one-tick fast-announce. A configured 5-hour interval is shortened to the
+ * not the old one-tick fast-announce. A configured 6-hour interval is shortened to the
  * 15-min cap; a duplicate one tick later still drops, but one past the 2-tick cap passes.
  */
 static void test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes(void)
 {
-    // Long interval that would normally suppress duplicates for 5 h.
+    // Long interval that would normally suppress duplicates for 6 h.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -3221,12 +3196,14 @@ static void test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes(void)
 
 /**
  * Verify a node with unknown role (absent from NodeDB) is not granted any role
- * exception: the full configured interval applies, so a duplicate inside that
- * window is dropped exactly as for an ordinary CLIENT.
+ * exception: the full configured interval applies, so a duplicate past the 1-hour
+ * TRACKER cap (and the ~15 min LOST_AND_FOUND cap) but inside the 6-hour CLIENT
+ * interval is still dropped. A shorter operator interval would hide a wrongly granted
+ * exception, since the caps only ever shorten the interval.
  */
 static void test_tm_unknownRole_noDbEntry_appliesFullInterval(void)
 {
-    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
     // No cached node - getMeshNode returns nullptr for kRemoteNode.
@@ -3235,46 +3212,43 @@ static void test_tm_unknownRole_noDbEntry_appliesFullInterval(void)
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket afterShort = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-
     ProcessMessage r1 = module.handleReceived(first);
-    ProcessMessage r2 = module.handleReceived(dup); // within 300-s window - must drop
-    // The 300 s operator interval rounds to 1 pos-tick (360 s) - dedup is tick-granular.
-    // Advance past one full tick to confirm the packet passes without any tracker exception.
-    TrafficManagementModule::s_testNowMs += 360'000UL + 1;
-    ProcessMessage r3 = module.handleReceived(afterShort);
+
+    TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
+    meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    ProcessMessage r2 = module.handleReceived(afterCap);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
     TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
 }
 
 /**
  * Verify a node present in NodeDB but without user info (HAS_USER bit clear)
- * is not granted a role exception: it falls back to CLIENT and the full
- * configured interval applies.
+ * is not granted a role exception even though its stale role field reads TRACKER:
+ * it falls back to CLIENT, so a duplicate past the 1-hour TRACKER cap but inside
+ * the 6-hour CLIENT interval is still dropped.
  */
 static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
 {
-    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
     // Node is in NodeDB but the HAS_USER bit is NOT set - role must be ignored.
     mockNodeDB->setCachedNode(kRemoteNode);
-    // Clear the HAS_USER bit that setCachedNode sets, leaving role at CLIENT default.
+    // Clear the HAS_USER bit that setCachedNode sets; the TRACKER role below must then be ignored.
     mockNodeDB->cachedNodeForTest().bitfield &= ~NODEINFO_BITFIELD_HAS_USER_MASK;
     mockNodeDB->cachedNodeForTest().role = meshtastic_Config_DeviceConfig_Role_TRACKER;
 
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket first = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-    meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
-
     ProcessMessage r1 = module.handleReceived(first);
-    ProcessMessage r2 = module.handleReceived(dup); // within 300-s window - must drop
+
+    TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
+    meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+    ProcessMessage r2 = module.handleReceived(afterCap);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r1));
@@ -3282,43 +3256,10 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
     TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
 }
 
-/**
- * Verify a LOST_AND_FOUND origin now GETS the relayed precision clamp - the
- * anti-dox exemption was removed, so a relayed position more precise than the
- * channel setting is clamped down to the channel ceiling like any other node's.
- */
-static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
-{
-    // Set channel precision ceiling to 13 bits. Must be <= MAX_POSITION_PRECISION_PUBLIC_KEY
-    // (15) - well-known channels have a public PSK (size==1), so getPositionPrecisionForChannel
-    // clamps any value above 15 via usesPublicKey().
-    installWellKnownPrimaryChannelWithPrecision(13);
-
-    mockNodeDB->setCachedNode(kRemoteNode);
-    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
-
-    TrafficManagementModuleTestShim module;
-
-    // Full-precision packet - 32 bits - exceeds the channel cap.
-    const uint32_t fullPrecision = 32;
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, fullPrecision);
-    packet.hop_start = 3;
-    packet.hop_limit = 2; // relayed (hop_limit < hop_start) so clamp logic applies
-
-    module.alterReceived(packet);
-
-    meshtastic_Position out;
-    TEST_ASSERT_TRUE(decodePositionPayload(packet, out));
-    // Clamped to channel ceiling (13 bits) - lost-and-found is no longer exempt.
-    // Note: precision must be <= MAX_POSITION_PRECISION_PUBLIC_KEY (15); well-known
-    // channels always have a public PSK so getPositionPrecisionForChannel caps at 15.
-    TEST_ASSERT_EQUAL_UINT32(13, out.precision_bits);
-}
-
 // ---------------------------------------------------------------------------
 // Fuzz - crafted-nodenum blitz of the unified cache
 // ---------------------------------------------------------------------------
-// Floods handleReceived/alterReceived with crafted packets over a tiny node pool so the fixed-size
+// Floods handleReceived with crafted packets over a tiny node pool so the fixed-size
 // cache churns hard while the virtual clock sweeps the rate/unknown/position windows; no crash, counters bounded.
 static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
 
@@ -3387,8 +3328,6 @@ static void test_tm_fuzz_nodenum_blitz(void)
         }
 
         (void)module.handleReceived(p);
-        if (rngRange(3) == 0)
-            module.alterReceived(p);
 
         // Advance the virtual clock so rate / unknown / position windows open and close under churn.
         if (rngRange(16) == 0)
@@ -3457,6 +3396,7 @@ TM_TEST_ENTRY void setup()
 #endif
 #if TMM_HAS_NODEINFO_CACHE
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
+    RUN_TEST(test_tm_nodeinfo_directResponse_signedRequestForwarded);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
@@ -3465,6 +3405,8 @@ TM_TEST_ENTRY void setup()
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
     RUN_TEST(test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery);
+    RUN_TEST(test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo);
+    RUN_TEST(test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsManualVerificationFromHotStore);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
@@ -3497,12 +3439,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_cache_dropsFrameCarryingOwnerKey);
 #endif
 #endif
-    RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
-    RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
     RUN_TEST(test_tm_positionDedup_continuousDuplicatesStillRefresh);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
-    RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_distinctAtClampedChannelPrecision);
     RUN_TEST(test_tm_positionDedup_precisionZero_channelFallsBackToDefault);
     RUN_TEST(test_tm_positionDedup_cacheFlush_doesNotDropFirstPacketAfterFlush);
@@ -3510,10 +3449,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);
     RUN_TEST(test_tm_unknownPackets_thresholdAbove255_clamps);
-    RUN_TEST(test_tm_alterReceived_positionBroadcast_hopLimitUnchanged);
-    RUN_TEST(test_tm_alterReceived_skipsUndecodedPackets);
-    RUN_TEST(test_tm_alterReceived_exhaustFlagAlwaysFalse);
-    RUN_TEST(test_tm_alterReceived_exhaustFlag_isPacketScoped);
     RUN_TEST(test_tm_runOnce_disabledReturnsMaxInterval);
     RUN_TEST(test_tm_runOnce_enabledReturnsMaintenanceInterval);
     RUN_TEST(test_tm_nextHop_setAndGetRoundTrip);
@@ -3528,7 +3463,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);

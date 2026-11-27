@@ -26,6 +26,7 @@
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
@@ -74,6 +75,10 @@ CannedMessageModule::CannedMessageModule()
         LOG_INFO("CannedMessage: none configured, disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
+    } else if (!inputBroker) {
+        LOG_INFO("CannedMessage: no InputBroker, disabled");
+        this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
+        disable();
     } else {
         LOG_INFO("CannedMessageModule is enabled");
         moduleConfig.canned_message.enabled = true;
@@ -81,8 +86,31 @@ CannedMessageModule::CannedMessageModule()
     }
 }
 
+// TAK_TRACKER sends channel broadcasts only
+static bool allowsDirectMessages()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+}
+
+static const char *const NO_DMS_BANNER = "No DMs in TAK Tracker mode";
+
+static bool refusesDirectMessage(NodeNum dest)
+{
+    if (isBroadcast(dest) || allowsDirectMessages())
+        return false;
+    LOG_WARN("No DMs in TAK Tracker mode, not sending to 0x%08x", dest);
+    return true;
+}
+
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        // Shown from runOnce(): a menu banner callback clears any banner raised now
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
+        return;
+    }
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -115,8 +143,69 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_TRACE("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
+// Compose through the on-screen keyboard used by devices without a physical one
+// (rotary encoder, trackball, joystick). Returns false when no such keyboard exists,
+// so callers can fall back to the plain freetext screen.
+bool CannedMessageModule::showOnScreenKeyboard()
+{
+    if (!osk_found || !screen)
+        return false;
+
+    char headerBuffer[64];
+    if (this->dest == NODENUM_BROADCAST) {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+    } else {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+    }
+    screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
+        if (!text.empty()) {
+            this->freetext = text.c_str();
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+            currentMessageIndex = -1;
+
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            setIntervalFromNow(500);
+            return;
+        } else {
+            // Don't delete virtual keyboard immediately - it might still be executing
+            // Instead, just clear the callback and reset banner to stop input processing
+            graphics::NotificationRenderer::textInputCallback = nullptr;
+            graphics::NotificationRenderer::resetBanner();
+
+            // Return to inactive state
+            this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            this->currentMessageIndex = -1;
+            this->freetext = "";
+            this->cursor = 0;
+
+            // Force display update to show normal screen
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            // Schedule cleanup for next loop iteration to ensure safe deletion
+            setIntervalFromNow(50);
+            return;
+        }
+    });
+
+    return true;
+}
+
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
+        return;
+    }
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -130,12 +219,32 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastChannel = channel;
     lastDestSet = true;
 
+#if !defined(USE_VIRTUAL_KEYBOARD)
+    // The freetext screen needs real key input, so devices without a physical keyboard
+    // compose on the on-screen keyboard instead. Open it from runOnce() rather than here:
+    // menus call us from a banner callback, and the banner is torn down as soon as that
+    // callback returns, which would take the keyboard down with it.
+    if (!kb_found && osk_found && screen) {
+        pendingOskLaunch = true;
+        setIntervalFromNow(0);
+        LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination (OSK) dest=0x%08x ch=%d", dest, channel);
+        return;
+    }
+#endif
+
     updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
 
     LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
+}
+
+// Whether sendText PKC-encrypts a message to dest
+static bool sendsAsPki(NodeNum dest)
+{
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(dest);
+    return node && node->num != nodeDB->getNodeNum() && nodeInfoLiteHasUser(node) && node->public_key.size == 32;
 }
 
 static bool returnToCannedList = false;
@@ -263,7 +372,7 @@ void CannedMessageModule::updateDestinationSelectionList()
     // Preallocate space to reduce reallocation
     this->filteredNodes.reserve(numMeshNodes);
 
-    for (size_t i = 0; i < numMeshNodes; ++i) {
+    for (size_t i = 0; allowsDirectMessages() && i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
@@ -476,12 +585,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
 {
     runState = newState;
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        inputBroker->menuMode =
-            false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
-    } else {
-        inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+    if (inputBroker) {
+        if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            inputBroker->menuMode =
+                false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
+        } else {
+            inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+        }
     }
+
     if (shouldRequestFocus) {
         requestFocus();
     }
@@ -717,65 +829,18 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 
         // [Free Text] triggers the free text input (virtual keyboard)
-#if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
+#if defined(USE_VIRTUAL_KEYBOARD)
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
             return true;
-        }
 #else
-        if (strcmp(current, "[-- Free Text --]") == 0) {
-            if (osk_found && screen) {
-                char headerBuffer[64];
-                if (this->dest == NODENUM_BROADCAST) {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
-                } else {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
-                }
-                screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
-                    if (!text.empty()) {
-                        this->freetext = text.c_str();
-                        this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-                        updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
-                        currentMessageIndex = -1;
-
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        setIntervalFromNow(500);
-                        return;
-                    } else {
-                        // Don't delete virtual keyboard immediately - it might still be executing
-                        // Instead, just clear the callback and reset banner to stop input processing
-                        graphics::NotificationRenderer::textInputCallback = nullptr;
-                        graphics::NotificationRenderer::resetBanner();
-
-                        // Return to inactive state
-                        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-                        this->currentMessageIndex = -1;
-                        this->freetext = "";
-                        this->cursor = 0;
-
-                        // Force display update to show normal screen
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        // Schedule cleanup for next loop iteration to ensure safe deletion
-                        setIntervalFromNow(50);
-                        return;
-                    }
-                });
-
+            if (showOnScreenKeyboard())
                 return true;
-            }
-        }
 #endif
+        }
 
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
@@ -1009,12 +1074,15 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
         String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
-        if (cursor == freetext.length()) {
-            freetext += emoteInsert;
-        } else {
-            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        // Whole or not at all: the editor's limit applies, and half a label would be garbage
+        if (freetext.length() + emoteInsert.length() <= maxFreetextBytes()) {
+            if (cursor == freetext.length()) {
+                freetext += emoteInsert;
+            } else {
+                freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+            }
+            cursor += emoteInsert.length();
         }
-        cursor += emoteInsert.length();
         updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
@@ -1032,6 +1100,12 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    if (refusesDirectMessage(dest)) {
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
+        return;
+    }
+
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
@@ -1044,37 +1118,42 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->want_ack = true;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
-    this->lastSentNode = dest;
-    this->incoming = dest;
-
-    // Manually find the node by number to check PKI capability
-    meshtastic_NodeInfoLite *node = nullptr;
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < numMeshNodes; ++i) {
-        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num == dest) {
-            node = n;
-            break;
-        }
-    }
-
-    NodeNum myNodeNum = nodeDB->getNodeNum();
-    if (node && node->num != myNodeNum && nodeInfoLiteHasUser(node) && node->public_key.size == 32) {
+    if (sendsAsPki(dest)) {
         p->pki_encrypted = true;
         p->channel = 0; // force PKI
     }
 
-    // Track this packet’s request ID for matching ACKs
-    this->lastRequestId = p->id;
+    // What history records: all of the text, unless GeoChat had to cut it
+    size_t textLen = strlen(message);
 
-    // Copy payload
-    p->decoded.payload.size = strlen(message);
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat carries the text alone, so send_bell doesn't apply to it
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        if (!AtakPluginModule::setGeoChatPayload(p, message, textLen, &textLen)) {
+            packetPool.release(p);
+            return;
+        }
+    } else
+#endif
+    {
+        // Copy payload, never past its buffer
+        size_t copyLen = textLen;
+        if (copyLen > sizeof(p->decoded.payload.bytes))
+            copyLen = sizeof(p->decoded.payload.bytes);
+        p->decoded.payload.size = copyLen;
+        memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
-        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+            p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
+            p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        }
     }
+
+    // Track this packet’s request ID for matching ACKs. Only now: a failed build above must leave
+    // the previous packet's ACK context whole.
+    this->lastSentNode = dest;
+    this->incoming = dest;
+    this->lastRequestId = p->id;
 
     this->waitingForAck = true;
 
@@ -1099,7 +1178,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
-    size_t len = strnlen(message, MAX_MESSAGE_SIZE - 1);
+    size_t len = std::min(textLen, (size_t)(MAX_MESSAGE_SIZE - 1));
     sm.textOffset = MessageStore::storeText(message, len);
     sm.textLength = len;
 
@@ -1144,6 +1223,20 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    if (this->pendingDmRefusal) {
+        this->pendingDmRefusal = false;
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
+    }
+
+    // A menu asked to compose freetext on the on-screen keyboard; the menu banner is gone
+    // by now, so it is safe to bring the keyboard up.
+    if (this->pendingOskLaunch) {
+        this->pendingOskLaunch = false;
+        if (showOnScreenKeyboard())
+            return INT32_MAX; // the text input callback drives everything from here
+    }
+
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
         updateDestinationSelectionList();
         needsUpdate = false;
@@ -1375,7 +1468,7 @@ int32_t CannedMessageModule::runOnce()
                                          this->freetext.substring(this->cursor);
                     }
                     this->cursor++;
-                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    const unsigned int maxChars = maxFreetextBytes();
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
                         this->freetext = this->freetext.substring(0, maxChars);
@@ -1457,7 +1550,7 @@ int CannedMessageModule::getPrevIndex()
 
 #if defined(USE_VIRTUAL_KEYBOARD)
 
-String CannedMessageModule::keyForCoordinates(uint x, uint y)
+String CannedMessageModule::keyForCoordinates(int x, int y)
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
@@ -1937,8 +2030,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-            uint16_t charsLeft =
-                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            // The limit the editor keeps to, not the whole payload: the counter showed 33 left when no more could be typed
+            const unsigned int used = this->freetext.length();
+            int charsLeft = used < maxFreetextBytes() ? (int)(maxFreetextBytes() - used) : 0;
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - BASEUI_HEADER_LR_MARGIN,
                                 y + BASEUI_HEADER_MARGIN, buffer);
@@ -2187,9 +2281,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 this->ack = isAck;
                 waitingForAck = false;
             } else if (isAck) {
-                // Relay ACK → mark as RELAYED, still no final ACK
+                // A relay ACK is not a delivery, so stay in waitingForAck. Clearing it here makes the
+                // guard at the top reject the destination's own ACK and this stays RELAYED for good.
                 this->ack = false;
-                waitingForAck = false;
             } else {
                 // Explicit failure
                 this->ack = false;
@@ -2382,6 +2476,21 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
             moduleConfig.canned_message.enabled = true;
         }
     }
+}
+
+unsigned int CannedMessageModule::maxFreetextBytes() const
+{
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat leaves less room than a plain text payload. If the lookup fails (0), keep the plain
+    // limit rather than wipe the draft; the send cuts the text to fit.
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        const bool pki = sendsAsPki(dest);
+        if (const size_t limit = AtakPluginModule::maxGeoChatBytes(dest, pki ? 0 : channel, pki))
+            return limit;
+    }
+#endif
+    // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
+    return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)
