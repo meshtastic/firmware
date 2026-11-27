@@ -11,6 +11,7 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "gps/GPSLog.h"
@@ -23,6 +24,7 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
+#include "sleep.h"
 #include <assert.h>
 #include <string>
 
@@ -152,25 +154,98 @@ void MeshService::loop()
             identityGenerationSeen = generation;
         }
     }
+    applyDeferredRadioConfig();
+}
+
+void MeshService::awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec)
+{
+    if (!radioConfigDeferred)
+        return;
+    radioConfigAwaitsAckOf = id;
+    radioConfigAwaitedReplySeen = false;
+    radioConfigAwaitedRetryMsec = retryMsec;
+    radioConfigRetrySentAtMs = 0;
+    radioConfigReplyLeftQueue = false;
+    radioConfigRetryQueuedSeen = false;
+}
+
+void MeshService::applyDeferredRadioConfig()
+{
+    if (!radioConfigDeferred)
+        return;
+    bool ready;
+    bool holdForRetry = false;
+    if (radioConfigAwaitsAckOf) {
+        // The pending table holds a reliable reply from its send until its ack, so leaving it means acked (or given up)
+        // and other queued traffic needn't hold the retune. Never in it (no retransmission copy): it is only queued.
+        const int retries = router ? router->retransmissionsQueued(nodeDB->getNodeNum(), radioConfigAwaitsAckOf) : -1;
+        const bool pending = retries >= 0;
+        radioConfigAwaitedReplySeen |= pending;
+        ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
+        // Other traffic pushes the retry's deadline back, so follow the router rather than predict it. The count drops
+        // when a retry is due, queued or not (allocation can fail), and a retry shares the original's id in the TX
+        // queue: a retry is out once seen queued after the original left, and gone again.
+        if (pending && !radioConfigRetrySentAtMs) {
+            if (!router->findInTxQueue(nodeDB->getNodeNum(), radioConfigAwaitsAckOf)) {
+                if (radioConfigRetryQueuedSeen)
+                    radioConfigRetrySentAtMs = Time::skipZero(Time::getMillis());
+                radioConfigReplyLeftQueue = true;
+            } else if (radioConfigReplyLeftQueue && retries > 0) {
+                radioConfigRetryQueuedSeen = true;
+            }
+        }
+        holdForRetry = pending && (!radioConfigRetrySentAtMs ||
+                                   Throttle::isWithinTimespanMs(radioConfigRetrySentAtMs, radioConfigAwaitedRetryMsec));
+    } else {
+        ready = doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
+    }
+    if (ready) {
+        LOG_INFO("Admin reply delivered, apply the deferred radio change");
+    } else if (!holdForRetry && Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
+        LOG_WARN("Admin reply still pending, apply the deferred radio change anyway");
+    } else {
+        return;
+    }
+    applyRadioConfig();
+}
+
+void MeshService::applyRadioConfig()
+{
+    radioConfigDeferred = false;
+    radioConfigAwaitsAckOf = 0;
+    radioConfigRetrySentAtMs = 0;
+    radioConfigReplyLeftQueue = false;
+    radioConfigRetryQueuedSeen = false;
+
+    // This will also update the region as needed
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+
+    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+
+    // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
+    // a client rolling through presets just moves this and moves it back.
+    nodeDB->refreshCommittedLoraSlot();
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-void MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat, bool deferRadio)
 {
     // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
     // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
     if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
-        // If we can successfully set this radio to these settings, save them to disk
-
-        // This will also update the region as needed
-        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
-
-        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-
-        // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
-        // a client rolling through presets just moves this and moves it back.
-        nodeDB->refreshCommittedLoraSlot();
+        // A save during an active deferral joins it, a local one too: retuning now would strand the awaited reply.
+        if (deferRadio || radioConfigDeferred) {
+            // The channel re-hash waits too: an unnamed primary hashes the preset name, and a reply hashed
+            // for the new preset is undecodable on the old one. Boot re-runs the same fixups on what is saved.
+            LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
+            // Joining keeps the clock; restarting it would let repeated saves outrun the cap.
+            if (!radioConfigDeferred)
+                radioConfigDeferredAtMs = Time::getMillis();
+            radioConfigDeferred = true;
+        } else {
+            applyRadioConfig();
+        }
     }
     nodeDB->saveToDisk(saveWhat);
 }

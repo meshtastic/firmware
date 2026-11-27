@@ -106,7 +106,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     bool cancelSending(NodeNum from, PacketId id);
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
-    bool findInTxQueue(NodeNum from, PacketId id);
+    virtual bool findInTxQueue(NodeNum from, PacketId id);
+
+    /** For a packet we sent with want_ack still awaiting its ack: how many retransmissions have been queued. -1 if not
+     * pending. */
+    virtual int retransmissionsQueued(NodeNum from, PacketId id) { return -1; }
 
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned

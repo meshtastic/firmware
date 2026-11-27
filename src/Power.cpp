@@ -15,6 +15,7 @@
  */
 #include "Power.h"
 #include "BluetoothCommon.h"
+#include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -1027,14 +1028,21 @@ bool Power::setup()
     return found;
 }
 
+bool Power::rebootIsDue()
+{
+    // 0 means "not scheduled", and reads as long expired - test it first. A deferred radio change is still
+    // waiting for an admin reply to go out and be acked, and the reboot would cut that off.
+    return rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec) && !(service && service->isRadioConfigDeferred());
+}
+
 void Power::powerCommandsCheck()
 {
-    // 0 means "not scheduled" for both, and reads as long expired - test it first.
-    if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
+    if (rebootIsDue()) {
         LOG_INFO("Rebooting");
         reboot();
     }
 
+    // 0 means "not scheduled", and reads as long expired - test it first.
     if (shutdownAtMsec && Throttle::deadlinePassed(shutdownAtMsec)) {
         shutdownAtMsec = 0;
         shutdown();

@@ -1061,7 +1061,8 @@ void NodeDB::stampRfHear(meshtastic_NodeInfoLite *info, const meshtastic_MeshPac
     // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
     if (!info || mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA || mp.via_mqtt)
         return;
-    const uint16_t slot = currentLoraSlot().fingerprint();
+    const bool radioBehindConfig = service && service->isRadioConfigDeferred(); // until a deferred admin retune runs
+    const uint16_t slot = radioBehindConfig ? committedSlot : currentLoraSlot().fingerprint();
     if (nodeInfoLiteHeardOnSlot(info, slot))
         return;
     nodeInfoLiteSetHeardSlot(info, slot);

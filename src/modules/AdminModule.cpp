@@ -111,6 +111,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 {
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
+    requestSavedRadioChange = false;
     assert(r);
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -731,6 +732,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
+    // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries. Only the
+    // reply to the save that deferred the change: a later read's ack says nothing about the save's reply.
+    if (myReply && mp.want_ack && mp.from != 0 && requestSavedRadioChange) {
+        RadioInterface *iface = router->getRadioIface();
+        service->awaitAckBeforeRadioConfig(myReply->id, iface ? iface->getRetransmissionMsec(myReply) : 0);
+    }
     return handled;
 }
 
@@ -1141,8 +1148,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
 
-        // All LoRa radio changes apply live via configChanged observer → reconfigure().
-        // reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
+        // All LoRa radio changes apply live via configChanged → reconfigure(), once this request's reply is out
+        // (saveChanges). reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
         requiresReboot = false;
 
 #if defined(ARCH_PORTDUINO)
@@ -1885,7 +1892,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        // A remote request's reply is queued after we return and goes over LoRa: retune only once it has gone out on
+        // the current settings, or the requester never hears it. A local client's reply never touches the radio.
+        const bool remoteRequest = currentRequest && currentRequest->from != 0;
+        service->reloadConfig(saveWhat, remoteRequest);
+        requestSavedRadioChange |= remoteRequest && (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)); // what reloadConfig defers
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out

@@ -10,6 +10,7 @@
 #include "MeshRadio.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "UptimeClock.h"
 #ifdef ARCH_PORTDUINO
 #include "PointerQueue.h"
 #else
@@ -79,6 +80,20 @@ class MeshService
 
     /// Updated in loop() to detect when fromNum changes
     uint32_t oldFromNum = 0;
+
+    // An admin save's reply is queued after the save, so a retune at save time sends it on the new settings,
+    // where the requester isn't listening.
+    bool radioConfigDeferred = false;
+    uint32_t radioConfigDeferredAtMs = 0;
+    PacketId radioConfigAwaitsAckOf = 0;      // our reply that must be acked (or given up) before the retune; 0 = none
+    bool radioConfigAwaitedReplySeen = false; // that reply has been in the router's pending-retransmission table
+    uint32_t radioConfigAwaitedRetryMsec = 0; // its retransmission interval: how long its first retry's ack may take
+    uint32_t radioConfigRetrySentAtMs = 0;    // when its first retry was seen sent; 0 = not yet
+    bool radioConfigReplyLeftQueue = false;   // its original send has been seen out of the TX queue
+    bool radioConfigRetryQueuedSeen = false;  // a retry of it has been seen in the TX queue after that
+
+    /// Retune the radio to the current config and record the slot it is now committed to.
+    void applyRadioConfig();
 
   public:
     enum APIState {
@@ -186,10 +201,45 @@ class MeshService
     void injectAsReceived(meshtastic_MeshPacket &p);
 #endif
 
-    /** The radioConfig object just changed, call this to force the hw to change to the new settings
-     * @return true if client devices should be sent a new set of radio configs
+    /** The radioConfig object just changed, call this to force the hw to change to the new settings.
+     * deferRadio saves now and leaves channel re-hash and retune to applyDeferredRadioConfig().
      */
-    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
+                      bool deferRadio = false);
+
+    /// A radio change saved with deferRadio that the radio hasn't been retuned to yet. Holds a pending reboot.
+    bool isRadioConfigDeferred() const { return radioConfigDeferred; }
+
+    /// Also hold the deferred retune until our packet `id` (the admin reply) is acked or its retransmissions give up,
+    /// so a lost first transmission is retried where the requester is still listening. retryMsec is the reply's
+    /// RadioInterface::getRetransmissionMsec(): past the cap, the retune still waits for the first retry to go out
+    /// and then this long for its ack.
+    void awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec);
+
+    /// Cap on a deferred radio change, so a saturated channel can't hold it forever. Covers one reply at
+    /// LONG_SLOW (~3.3 s on air, a 64-slot contention window ~10 s); a pending awaited reply extends it to its retry.
+    static constexpr uint32_t RADIO_CONFIG_DEFER_MAX_MS = 20 * 1000;
+
+    /// Apply a deferred radio change once the awaited reply is acked (with none, once nothing is queued or on air),
+    /// or once the cap has passed and a pending awaited reply's first retry has had its retransmission interval.
+    void applyDeferredRadioConfig();
+#ifdef PIO_UNIT_TESTING
+    /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.
+    void ageRadioConfigDeferralForTest(uint32_t ms) { radioConfigDeferredAtMs -= ms; }
+    /// Same for the awaited reply's first retry, once one has been seen sent (no-op before).
+    void ageAwaitedRetryForTest(uint32_t ms)
+    {
+        if (radioConfigRetrySentAtMs)
+            radioConfigRetrySentAtMs -= ms;
+    }
+    /// Hold a radio change without saving one, for suites that must not write config.proto.
+    void deferRadioConfigForTest()
+    {
+        radioConfigDeferred = true;
+        radioConfigDeferredAtMs = Time::getMillis();
+    }
+    PacketId awaitedReplyForTest() const { return radioConfigAwaitsAckOf; }
+#endif
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

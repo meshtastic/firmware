@@ -1659,6 +1659,35 @@ static void test_txHook_invalidTarget_isDrop(void)
 }
 
 /**
+ * MeshBeaconTxHook::beforeTransmit() while MeshService holds a deferred admin radio change. config.lora
+ * already carries that change, so a beacon switch would snapshot it as home and its restore would retune
+ * onto it before the admin reply is acked, losing the reply. The beacon is dropped and the radio left alone.
+ */
+static void test_txHook_beaconDuringDeferredAdminRetune_isDrop(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    service->deferRadioConfigForTest();
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7A000009;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DROP, RadioTxHooks::beforeTransmit(&radio, &pkt),
+                                  "a beacon during a deferred admin retune must be dropped");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "the beacon must not touch the radio during the deferral");
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+
+    RadioTxHooks::packetReleased(&radio, &pkt);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, radio.reconfigureCalls, "releasing the dropped beacon must not retune either");
+}
+
+/**
  * The hook list is what keeps the driver free of module includes: with nothing registered every call
  * is a no-op, so a build without the beacon module behaves exactly as one with beacons idle.
  */
@@ -2517,6 +2546,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_txHook_normalPacket_isSend);
     RUN_TEST(test_txHook_beaconPacket_isDefer);
     RUN_TEST(test_txHook_invalidTarget_isDrop);
+    RUN_TEST(test_txHook_beaconDuringDeferredAdminRetune_isDrop);
     RUN_TEST(test_txHook_unregistered_isNoOp);
     RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
     RUN_TEST(test_txHook_rewritesChannelHashForTarget);
