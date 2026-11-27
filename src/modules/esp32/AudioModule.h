@@ -6,7 +6,6 @@
 #if defined(ARCH_ESP32) && defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "NodeDB.h"
 #include <Arduino.h>
-#include <ButterworthFilter.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <codec2.h>
@@ -28,7 +27,7 @@ struct c2_header {
 #define I2S_PORT I2S_NUM_0
 
 #define AUDIO_MODULE_RX_BUFFER 128
-#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
+#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700C
 
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
