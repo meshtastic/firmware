@@ -105,16 +105,10 @@ void setupNicheGraphics()
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-    // #1: Aux Button - short: next tile; long: toggle E290 panel waveform
+    // #1: Aux Button - short: next tile. Panel wizard redo is hold AUX + RESET (or Options menu).
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
-        playChirp();
-    });
-    buttons->setHandlerLongPress(1, [inkhud, driver]() {
-        driver->toggleWaveform();
-        driver->showModeBanner();
-        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
         playChirp();
     });
 

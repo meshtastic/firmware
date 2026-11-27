@@ -46,7 +46,8 @@ struct WaveformStore {
     uint8_t mode = static_cast<uint8_t>(HeltecVME290Waveform::Unset);
 };
 
-// Canvas sized for InkHUD default rotation=1 (296 x 128 logical).
+// Heltec-default landscape (296 x 128): buttons along the top edge.
+// Same controller map as classic E290 (GxEPD2 rot3 + DISPLAY_FLIP_SCREEN).
 class RotatedCanvas : public GFX
 {
   public:
@@ -62,7 +63,6 @@ class RotatedCanvas : public GFX
         if (x < 0 || y < 0 || x >= width() || y >= height())
             return;
 
-        // InkHUD rotation=1: logical (x,y) -> controller
         int16_t cx = (driverWidth - 1) - y;
         int16_t cy = x;
         if (cx < 0 || cy < 0 || cx >= driverWidth || cy >= driverHeight)
@@ -79,6 +79,19 @@ class RotatedCanvas : public GFX
     uint8_t *buffer;
     uint16_t rowBytes;
 };
+
+// Button centers from left glass edge: USR 3.8mm, AUX 10.8mm (296px / 66.9mm).
+// Tuned -1.2mm from measured 5/12mm after on-device check.
+constexpr int16_t kUsrArrowX = 17;
+constexpr int16_t kAuxArrowX = 48;
+
+static void drawUpArrow(GFX &g, int16_t tipX, int16_t tipY)
+{
+    constexpr int16_t head = 10;
+    constexpr int16_t stem = 14;
+    g.fillTriangle(tipX, tipY, tipX - head / 2, tipY + head, tipX + head / 2, tipY + head, 0);
+    g.fillRect(tipX - 1, tipY + head, 3, stem, 0);
+}
 
 static bool buttonDown(uint8_t pin)
 {
@@ -219,28 +232,26 @@ void HeltecVME290::finalizeUpdate()
     forceOtpFast = false;
 }
 
-void HeltecVME290::paintSelectFrame(uint8_t *buffer, bool updated)
+void HeltecVME290::paintSelectFrame(uint8_t *buffer, bool arrowAtAux)
 {
-    // Landscape (InkHUD rotation=1): 296 x 128. Title + button help stay identical on
-    // both frames; only the status line changes so OTP FAST is an obvious optical test.
+    // Frame 1: arrow under USR. Frame 2 (OTP FAST): arrow under AUX. User presses the named button.
     RotatedCanvas canvas(width, height, buffer);
     canvas.setTextColor(0);
 
-    canvas.setFont(&FreeSans12pt_Win1252);
-    canvas.setCursor(8, 22);
-    canvas.print("Display setup");
+    const int16_t arrowX = arrowAtAux ? kAuxArrowX : kUsrArrowX;
+    drawUpArrow(canvas, arrowX, 2);
 
     canvas.setFont(&FreeSans9pt_Win1252);
-    canvas.setCursor(8, 48);
-    canvas.print(updated ? "Refresh test: passed" : "Refresh test: ...");
+    canvas.setCursor(72, 36);
+    canvas.print("Screen detection");
+
+    canvas.setFont(&FreeSans12pt_Win1252);
+    canvas.setCursor(72, 68);
+    canvas.print(arrowAtAux ? "Press AUX" : "Press USR");
 
     canvas.setFont(&FreeSans6pt_Win1252);
-    canvas.setCursor(8, 72);
-    canvas.print("Did the Refresh test line change?");
-    canvas.setCursor(8, 92);
-    canvas.print("User button: Yes, it passed");
-    canvas.setCursor(8, 110);
-    canvas.print("Aux button hold: No, it stayed the same");
+    canvas.setCursor(72, 100);
+    canvas.print("Redo: hold AUX + RESET");
 }
 
 void HeltecVME290::paintBannerFrame(uint8_t *buffer, const char *label)
@@ -259,7 +270,7 @@ void HeltecVME290::paintBannerFrame(uint8_t *buffer, const char *label)
 
     canvas.setFont(&FreeSans6pt_Win1252);
     canvas.setCursor(8, 100);
-    canvas.print("Change later: Aux hold, or Options menu");
+    canvas.print("Redo: hold AUX + RESET, or Options");
 }
 
 void HeltecVME290::showModeBanner()
@@ -277,25 +288,21 @@ HeltecVME290Waveform HeltecVME290::waitForSelectChoice(uint8_t userButtonPin, ui
     pinMode(userButtonPin, INPUT_PULLUP);
     pinMode(auxButtonPin, INPUT_PULLUP);
 
-    uint32_t auxDownAt = 0;
     while (true) {
         if (buttonDown(userButtonPin)) {
             delay(40);
             if (buttonDown(userButtonPin)) {
                 waitRelease(userButtonPin);
-                return HeltecVME290Waveform::OtpFast; // status line changed
+                return HeltecVME290Waveform::CustomLut; // parked arrow still under USR
             }
         }
 
         if (buttonDown(auxButtonPin)) {
-            if (auxDownAt == 0)
-                auxDownAt = millis();
-            else if (millis() - auxDownAt >= 500) {
+            delay(40);
+            if (buttonDown(auxButtonPin)) {
                 waitRelease(auxButtonPin);
-                return HeltecVME290Waveform::CustomLut; // status line unchanged
+                return HeltecVME290Waveform::OtpFast; // parked arrow under AUX
             }
-        } else {
-            auxDownAt = 0;
         }
 
         yield();
@@ -304,6 +311,18 @@ HeltecVME290Waveform HeltecVME290::waitForSelectChoice(uint8_t userButtonPin, ui
 
 void HeltecVME290::runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButtonPin)
 {
+    pinMode(auxButtonPin, INPUT_PULLUP);
+    delay(20);
+    // Hold AUX through RESET to re-run the wizard. Do not use Aux long-press while InkHUD runs.
+    if (buttonDown(auxButtonPin)) {
+        delay(50);
+        if (buttonDown(auxButtonPin)) {
+            LOG_INFO("E290 panel select: Aux held at boot, re-running wizard");
+            mode = HeltecVME290Waveform::Unset;
+            waitRelease(auxButtonPin); // don't count this hold as the select answer
+        }
+    }
+
     if (mode != HeltecVME290Waveform::Unset)
         return;
 
@@ -312,11 +331,11 @@ void HeltecVME290::runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButt
     const uint16_t rowBytes = static_cast<uint16_t>(((width - 1) / 8) + 1);
     uint8_t *buffer = new uint8_t[rowBytes * height];
 
-    paintSelectFrame(buffer, false);
+    paintSelectFrame(buffer, false); // arrow under USR
     SSD16XX::update(buffer, FULL);
     await();
 
-    paintSelectFrame(buffer, true);
+    paintSelectFrame(buffer, true); // arrow under AUX
     updateOtpFast(buffer);
     await();
 

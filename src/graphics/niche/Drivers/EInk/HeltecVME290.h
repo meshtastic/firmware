@@ -41,10 +41,10 @@ class HeltecVME290 : public SSD16XX
     // First-boot / recovery: paint OTP FAST regardless of stored mode.
     void updateOtpFast(uint8_t *imageData);
 
-    // Blocking FULL refresh that shows the current mode label (rotation matches InkHUD default).
+    // Blocking FULL refresh that shows the current mode label (Heltec-default landscape).
     void showModeBanner();
 
-    // Blocking first-boot panel select (optical OTP FAST probe). No-op if mode already set.
+    // Blocking panel select (optical OTP FAST probe). Runs when mode is Unset, or when AUX is held through RESET.
     void runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButtonPin);
 
   protected:
@@ -57,8 +57,8 @@ class HeltecVME290 : public SSD16XX
   private:
     void loadMode();
     void saveMode();
-    // updated=false: initial FULL frame; updated=true: OTP FAST frame (status line only differs).
-    void paintSelectFrame(uint8_t *buffer, bool updated);
+    // arrowAtAux=false: FULL frame (arrow under USR); true: OTP FAST frame (arrow under AUX).
+    void paintSelectFrame(uint8_t *buffer, bool arrowAtAux);
     void paintBannerFrame(uint8_t *buffer, const char *label);
     HeltecVME290Waveform waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin);
 
