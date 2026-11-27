@@ -318,11 +318,16 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}
-          merge-multiple: true
-          path: ./output
+      # The files are already here from the first download. Fetching the artifact just uploaded
+      # races its listing and fails with "Artifact not found".
+      - name: Stage the repackaged files
+        run: |
+          shopt -s nullglob
+          mkdir -p ./output
+          files=(./firmware-*.mt.json ./firmware-*.bin ./firmware-*.uf2 ./firmware-*.hex ./firmware-*.zip \
+            ./device-*.sh ./device-*.bat ./littlefs-*.bin ./bleota*bin ./mt-*-ota.bin \
+            ./Meshtastic_nRF52_factory_erase*.uf2)
+          if ((${#files[@]})); then cp "${files[@]}" ./output/; fi
 
       # For diagnostics
       - name: Show artifacts
