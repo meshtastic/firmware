@@ -172,29 +172,78 @@ tag_sdkconfig_cache_key(env)
 
 
 # The platform writes its cache-key hash into sdkconfig.defaults before compiling
-# the IDF libs, so an aborted pass leaves it describing libs that were never built.
-def drop_stale_sdkconfig_defaults(env):
-    defaults = join(env.subst("$PROJECT_DIR"), "sdkconfig.defaults")
+# the IDF libs, and stores the compiled libs globally under framework-arduinoespressif32-libs.
+# Recording that hash alongside the built libs lets us detect both aborted builds
+# and another checkout/worktree overwriting the shared libs for a different board.
+SDKCONFIG_HASH_PREFIX = "# TASMOTA__"
+SDKCONFIG_HASH_FILE = "sdkconfig.hash"
+
+
+def _read_sdkconfig_defaults_hash(path):
+    try:
+        with open(path, encoding="utf-8") as fp:
+            line = fp.readline().strip()
+    except OSError:
+        return None
+    if not line.startswith(SDKCONFIG_HASH_PREFIX):
+        return None
+    return line[len(SDKCONFIG_HASH_PREFIX) :] or None
+
+
+def _libs_chip_variant_dir(env):
     board = env.BoardConfig()
     mcu = board.get("build.mcu", "esp32")
     # arduino.py's idf_lib_copy() writes the post-compile sdkconfig under
     # libs/<chip_variant>/, which only equals libs/<mcu>/ when the board has no
     # chip_variant override (e.g. esp32p4 boards use chip_variant "esp32p4_es").
-    # Checking libs/<mcu>/ there would always see the untouched package template
-    # and re-delete sdkconfig.defaults on every single build.
     chip_variant = board.get("build.chip_variant", "").lower() or mcu
+    libs = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
+    return chip_variant, join(libs, chip_variant) if libs else None
+
+
+def drop_stale_sdkconfig_defaults(env):
+    defaults = join(env.subst("$PROJECT_DIR"), "sdkconfig.defaults")
+    expected_hash = _read_sdkconfig_defaults_hash(defaults)
+    if not expected_hash:
+        return
+    chip_variant, variant_dir = _libs_chip_variant_dir(env)
+    if not variant_dir:
+        return
     try:
-        libs = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
-        # Rewritten last by a completed compile, so it marks "libs built".
-        if getmtime(join(libs, chip_variant, "sdkconfig")) >= getmtime(defaults):
-            return
+        libs_mtime = getmtime(join(variant_dir, "sdkconfig"))
+        defaults_mtime = getmtime(defaults)
     except (OSError, TypeError):
+        return
+    try:
+        with open(join(variant_dir, SDKCONFIG_HASH_FILE), encoding="utf-8") as fp:
+            built_hash = fp.read().strip()
+    except OSError:
+        built_hash = None
+    if built_hash == expected_hash and libs_mtime >= defaults_mtime:
         return
     print("*** Stale %s IDF libs; forcing a HybridCompile rebuild ***" % chip_variant)
     remove(defaults)
 
 
+def record_sdkconfig_hash(source, target, env):
+    if env.get("ARDUINO_LIB_COMPILE_FLAG") != "Build":
+        return
+    defaults = join(env.subst("$PROJECT_DIR"), "sdkconfig.defaults")
+    expected_hash = _read_sdkconfig_defaults_hash(defaults)
+    if not expected_hash:
+        return
+    _, variant_dir = _libs_chip_variant_dir(env)
+    if not variant_dir:
+        return
+    try:
+        with open(join(variant_dir, SDKCONFIG_HASH_FILE), "w", encoding="utf-8") as fp:
+            fp.write(expected_hash + "\n")
+    except OSError as exc:
+        sys.stderr.write("Warning: failed to write %s: %s\n" % (SDKCONFIG_HASH_FILE, exc))
+
+
 drop_stale_sdkconfig_defaults(env)
+env.AddPreAction("checkprogsize", record_sdkconfig_hash)
 
 
 # ---------------------------------------------------------------------------
