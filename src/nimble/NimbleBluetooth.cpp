@@ -103,6 +103,8 @@ BLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+// The pairing mode setup() configured the stack with; config.bluetooth.mode can change under a live stack.
+static bool setupIsNoPin;
 
 // Set by onDisconnect to defer (re)starting advertising to the main task. A stale-bond reconnect
 // triggers a MIC failure + NimBLE host reset; re-entering ble_gap_adv_* from the disconnect
@@ -767,6 +769,13 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         const uint16_t connHandle = desc->conn_handle;
 
+        // NO_PIN never bonds, so no encryption change arrives to report the connection; do it here.
+        // The handle itself is recorded below for every mode.
+        if (setupIsNoPin) {
+            meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+            bluetoothStatus->updateStatus(&newStatus);
+        }
+
         // With Google Pixel 8 Android devices, this causes ESP32 device crash
         // when phone reconnects. Disable this to make progress on the
         // Arduino v3 migration while we investigate the Android compatibility
@@ -951,6 +960,7 @@ void NimbleBluetooth::setup()
 
     // BLESecurity only forwards to static NimBLEDevice setters; a stack instance suffices.
     BLESecurity security;
+    setupIsNoPin = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN;
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
@@ -972,8 +982,11 @@ void NimbleBluetooth::setup()
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
-        // No PIN mode: no MITM protection
-        security.setAuthenticationMode(true, false, false);
+        // No PIN mode: no MITM protection, and no bonding either. With bonding on, the node advertises
+        // the SMP bonding bit and a central "just works"-pairs on connect; if that pairing fails the ACL
+        // is torn down before an open characteristic can be subscribed. Nothing in NO_PIN needs an
+        // encrypted link, so don't offer to bond at all.
+        security.setAuthenticationMode(false, false, false);
     }
     // Statics: setup() re-runs on BLE re-enable, and the library never frees these
     // caller-owned callback objects, so register the same instances every cycle.
