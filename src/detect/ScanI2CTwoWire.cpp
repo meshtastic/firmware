@@ -1178,6 +1178,53 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
+#ifdef HAS_SE050
+                {
+                    // This board puts an SE050 at 0x48, so it is probed before anything else talks to that
+                    // address. The ADS1X15 check below writes a lone register pointer and reads two bytes
+                    // back, which an SE050 takes as the start of a T=1oI2C frame: after a warm reboot it then
+                    // NACKs or garbles the soft reset for 15-40 ms, and straight after power-up it did not
+                    // recover within ten tries, so the scan reported an FT6336U. The answer is NACK-polled and
+                    // the soft reset repeated a few times; if no SE050 answers, the checks below run as before.
+                    const uint8_t softReset[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
+                    const uint8_t softResetAnswer[] = {0xA5, 0xE0, 0x00, 0x3F, 0x19};
+                    const int maxTries = 10;
+                    uint8_t answer[sizeof(softResetAnswer)] = {0};
+                    size_t answerLen = 0;
+                    bool found = false;
+                    int tries = 0;
+
+                    while (!found && tries < maxTries) {
+                        if (tries++ > 0)
+                            delay(10); // let the chip drop whatever it made of the previous bytes
+                        i2cBus->beginTransmission(addr.address);
+                        i2cBus->write(softReset, sizeof(softReset));
+                        if (i2cBus->endTransmission() != 0)
+                            continue;
+                        for (int poll = 0; poll < 5; poll++) {
+                            delay(2); // guard time before the answer can be read back
+                            answerLen = i2cBus->requestFrom((uint8_t)addr.address, (uint8_t)sizeof(answer));
+                            if (answerLen == sizeof(answer))
+                                break;
+                        }
+                        if (answerLen == sizeof(answer)) {
+                            for (size_t i = 0; i < sizeof(answer); i++)
+                                answer[i] = i2cBus->read();
+                            found = (memcmp(softResetAnswer, answer, sizeof(answer)) == 0);
+                        }
+                    }
+
+                    if (found) {
+                        LOG_INFO("NXP SE050 crypto chip found");
+                        if (tries > 1)
+                            LOG_DEBUG("SE050 answered the soft reset on try %d", tries);
+                        type = NXP_SE050;
+                        break;
+                    }
+                    LOG_DEBUG("0x48: no SE050 answer after %d tries (last %u bytes %02x %02x %02x %02x %02x)", tries,
+                              (unsigned)answerLen, answer[0], answer[1], answer[2], answer[3], answer[4]);
+                }
+#endif
                 // Check ADS1X15 FIRST - the SE050 probe writes 5 bytes which corrupts the ADS1X15 Lo_thresh register.
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
                 if (registerValue == 0x8583 || registerValue == 0x8580 || registerValue == 0xf700 || registerValue == 0xc580) {
