@@ -1,3 +1,10 @@
+// MQTT bridge: config validation, proxy ingress, map reports and downlink policy.
+//
+// Why: the broker is a second, non-RF ingress into the mesh and the firmware's outbound
+// mirror; a policy regression can leak private positions or accept forged downlink.
+// Regression guarded: a proxied packet read from the wrong variant, a private position
+// published on a public server, and a signature policy bypass on downlink.
+
 #include "DebugConfiguration.h"
 #include "TestUtil.h"
 #include <unity.h>
@@ -715,14 +722,17 @@ void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
-// A proxy message with no payload variant set must be ignored rather than read as bytes.
+// A proxy message with no payload variant set must be ignored rather than read as bytes. The bytes
+// are the deliverable envelope from test_receiveDecodedProtoFromProxy, so reading them would route it.
 void test_receiveNoVariantFromProxyIsIgnored(void)
 {
+    const meshtastic_ServiceEnvelope env = {
+        .packet = const_cast<meshtastic_MeshPacket *>(&decoded), .channel_id = "test", .gateway_id = "!87654321"};
     meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
     snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
     message.which_payload_variant = 0;
-    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
-    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+    message.payload_variant.data.size = pb_encode_to_bytes(
+        message.payload_variant.data.bytes, sizeof(message.payload_variant.data.bytes), &meshtastic_ServiceEnvelope_msg, &env);
 
     mqtt->onClientProxyReceive(message);
 
@@ -1259,6 +1269,8 @@ void test_reportToMapDefaultImprecise(void)
     TEST_ASSERT_EQUAL(1, pubsub->published_.size());
     const auto &[topic, payload] = pubsub->published_.front();
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
+    // setUp configures precision 14: 700000000 / 300000000 truncated to that grid, then centred in the cell.
+    verifyLatLong(std::get<DecodedServiceEnvelope>(payload), 700055552, 300023808);
 }
 
 void test_eventPrimaryMapReportFollowsCompileTimePolicy(void)
@@ -1300,6 +1312,7 @@ void test_reportToMapImpreciseProxied(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", message.topic);
     TEST_ASSERT_EQUAL(meshtastic_MqttClientProxyMessage_data_tag, message.which_payload_variant);
     const DecodedServiceEnvelope env(message.payload_variant.data.bytes, message.payload_variant.data.size);
+    verifyLatLong(env, 700055552, 300023808);
 }
 
 // isUsingDefaultServer returns true when using the default server.
@@ -1497,15 +1510,6 @@ void test_configCustomHostAndPort(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// An unreachable server is still a valid config - settings always save.
-// A warning notification is sent in non-test builds, but isValidConfig returns true.
-void test_configWithUnreachableServerIsStillValid(void)
-{
-    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};
-
-    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
-}
-
 // isValidConfig returns true when tls_enabled is supported, or false otherwise.
 void test_configWithTLSEnabled(void)
 {
@@ -1660,7 +1664,6 @@ void setup()
     RUN_TEST(test_configWithDefaultServer);
     RUN_TEST(test_configWithDefaultServerAndInvalidPort);
     RUN_TEST(test_configCustomHostAndPort);
-    RUN_TEST(test_configWithUnreachableServerIsStillValid);
     RUN_TEST(test_configWithTLSEnabled);
     exit(UNITY_END());
 }

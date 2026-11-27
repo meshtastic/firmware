@@ -1,3 +1,10 @@
+// To-phone packet queue admission and eviction.
+//
+// Why: an ACK/NAK is the phone's only delivery confirmation; dropping it loses the
+// confirmation, while a low-priority packet may wait.
+// Regression guarded: a routing response dropped on a full queue, or an encrypted packet
+// classified by the aliased portnum.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>

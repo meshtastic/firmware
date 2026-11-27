@@ -1055,6 +1055,28 @@ void NodeDB::refreshCommittedLoraSlot()
     committedSlot = currentLoraSlot().fingerprint();
 }
 
+void NodeDB::stampRfHear(meshtastic_NodeInfoLite *info, const meshtastic_MeshPacket &mp)
+{
+    // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
+    // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
+    if (!info || mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA || mp.via_mqtt)
+        return;
+    const uint16_t slot = currentLoraSlot().fingerprint();
+    if (nodeInfoLiteHeardOnSlot(info, slot))
+        return;
+    nodeInfoLiteSetHeardSlot(info, slot);
+    // Anonymous peers are dropped at boot unless they acquire user info.
+    if (nodeInfoLiteHasUser(info))
+        nodeDatabaseDirty = true;
+}
+
+void NodeDB::noteRfHear(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || !mp.from || mp.from == getNodeNum())
+        return;
+    stampRfHear(getMeshNode(mp.from), mp);
+}
+
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Factory reset");
@@ -1358,7 +1380,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
      defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
-     defined(ELECROW_ThinkNode_M9) || defined(SEEED_WIO_TRACKER_L2) || defined(T_WATCH_ULTRA)) &&                                \
+     defined(ELECROW_ThinkNode_M9) || defined(SEEED_WIO_TRACKER_L2) || defined(SEEED_MESHPAGER_X2) || defined(T_WATCH_ULTRA)) && \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -4188,17 +4210,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
 
-        // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
-        // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt) {
-            const uint16_t slot = currentLoraSlot().fingerprint();
-            if (!nodeInfoLiteHeardOnSlot(info, slot)) {
-                nodeInfoLiteSetHeardSlot(info, slot);
-                // Anonymous peers are dropped at boot unless they acquire user info.
-                if (nodeInfoLiteHasUser(info))
-                    nodeDatabaseDirty = true;
-            }
-        }
+        stampRfHear(info, mp);
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT

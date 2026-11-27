@@ -94,15 +94,15 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Empty the RX FIFO of a frame nothing read out: RadioLib empties it only at the end of readData() */
     void discardUnreadRxFrame() override;
 
+    /** DC-DC regulator after every begin(), LDO if the variant defines LR2021_REGULATOR_LDO. Warn-only. */
+    void applyRegulator();
+
   private:
     /** The chip's TX FIFO fill level in bytes; false on SPI failure */
     bool readTxFifoLevel(uint16_t &level);
 
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
     bool fullBegin(float freq);
-
-    /** DC-DC regulator after every begin(), LDO if the variant defines LR2021_REGULATOR_LDO. Warn-only. */
-    void applyRegulator();
 
     /** Board LF PA table after begin(); HF keeps RadioLib default. Warn-only on setOutputPower miss. */
     void applyCustomLfPaTable(float freq);

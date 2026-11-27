@@ -88,6 +88,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     setHighestHopLimit(r, p->hop_limit);
     bool weWillRelay = false;
     uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
+    // Recorded here, before a relay copy of it changes its hops (shouldDecrementHopLimit, event mode caps)
+    if (p->hop_start > 0 && p->hop_limit == p->hop_start && p->relay_node != ourRelayID)
+        r.hop_limit |= HEARD_FROM_SENDER_MASK;
     if (p->relay_node == ourRelayID) { // If the relay_node is us, store it
         weWillRelay = true;
         setOurTxHopLimit(r, p->hop_limit);
@@ -176,6 +179,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             // fewer hops remaining.
             if (getHighestHopLimit(*found) > getHighestHopLimit(r))
                 setHighestHopLimit(r, getHighestHopLimit(*found));
+            r.hop_limit |= found->hop_limit & HEARD_FROM_SENDER_MASK;
 
             // Add the existing relayed_by to the new record, avoiding duplicates
             for (uint8_t i = 0; i < (NUM_RELAYERS - startIdx); i++) {
@@ -456,6 +460,17 @@ void PacketHistory::insert(const PacketRecord &r)
 
 /* Check if a certain node was a relayer of a packet in the history given an ID and sender
  * @return true if node was indeed a relayer, false if not */
+bool PacketHistory::wasHeardFromSender(const uint32_t id, const NodeNum sender)
+{
+    if (!initOk()) {
+        LOG_ERROR("PacketHistory - wasHeardFromSender: NOT INITIALIZED");
+        return false;
+    }
+
+    const PacketRecord *found = find(sender, id);
+    return found != NULL && (found->hop_limit & HEARD_FROM_SENDER_MASK);
+}
+
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {

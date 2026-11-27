@@ -66,6 +66,13 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 // Last programmed carrier; LF/HF hops use full begin() (live setOutputPower returns -706).
 static float lr20x0LastFreqMHz = 0;
 
+// Boards whose NRESET is not a GPIO (e.g. behind an IO expander) pulse it here; RadioLib's reset() is a no-op then.
+// A weak default rather than a weak reference: Mach-O ld rejects undefined weak symbols.
+extern "C" __attribute__((weak, noinline)) bool variant_pre_radio_reset(void)
+{
+    return true;
+}
+
 // Unlike SX126x/LR11x0 (on/off bool), the LR2021 RX gain boost is a 0-7 level (0 = disabled, 7 = max boost).
 // Map the historical on/off sx126x_rx_boosted_gain flag to max boost when enabled.
 #ifndef LR2021_RX_GAIN_BOOST_LEVEL
@@ -404,6 +411,11 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
         float tcxoVoltage = 0;
 #endif
 
+        if (!variant_pre_radio_reset()) {
+            LOG_ERROR("LR20x0 variant reset pulse failed");
+            return false;
+        }
+
         delay(10); // same TCXO settle window as init()
 
         rxArmedContinuous = false; // begin() resets the chip
@@ -485,13 +497,23 @@ template <typename T> void LR20x0Interface<T>::selectLfPaTable(float freq)
 
 template <typename T> void LR20x0Interface<T>::applyRegulator()
 {
+    // SetRegMode is refused outside STBY_RC (DS 6.3.18), and init() has already moved a TCXO board to STBY_XOSC
+    int16_t regRes = lora.standby(RADIOLIB_LR2021_STANDBY_RC);
 #ifdef LR2021_REGULATOR_LDO
     // For modules built without the SIMO inductor on LXA/LXB
-    int16_t regRes = lora.setRegulatorLDO();
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = lora.setRegulatorLDO();
     const char *regName = "LDO";
 #else
-    int16_t regRes = lora.setRegulatorDCDC();
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = lora.setRegulatorDCDC();
     const char *regName = "DC-DC";
+#endif
+#if !RADIOLIB_SPI_PARANOID
+    // The verdict comes back on the next transfer: read it here, or a refusal fails whichever command follows
+    const int16_t statusRes = module.spiConfig.checkStatusCb(&module);
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = statusRes;
 #endif
     if (regRes != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 set %s regulator %s%d", regName, radioLibErr, regRes);

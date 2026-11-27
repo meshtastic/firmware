@@ -1,3 +1,9 @@
+// GPS update scheduling intervals.
+//
+// Why: the interval decides fix latency and power draw, and is driven by time arithmetic
+// that is easy to get wrong around the clock wrap.
+// Regression guarded: a schedule that never fires or fires every loop.
+
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"

@@ -1,0 +1,7 @@
+# FAULT. HardwareSPI stores the device in a signed high nibble, so device 8 does
+# not round-trip and the touchscreen cannot use it.
+Lora:
+  Module: sim
+Touchscreen:
+  Module: XPT2046
+  spidev: spidev1.8

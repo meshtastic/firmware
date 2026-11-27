@@ -20,7 +20,9 @@
 #include "main.h"
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
+#include <algorithm>
 #include <assert.h>
+#include <cmath>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string.h>
@@ -28,6 +30,7 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "platform/portduino/SimRadio.h"
+#include "platform/portduino/TransparentRadio.h"
 #include "platform/portduino/USBHal.h"
 #endif
 
@@ -389,6 +392,23 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
 
 #ifdef ARCH_PORTDUINO
+    if (portduino_config.lora_module == use_transparent) {
+#if HAS_TRANSPARENT_RADIO
+        std::unique_ptr<TransparentLink> link = makeTransparentLink(portduino_config.lora_transparent_device);
+        if (!link) {
+            LOG_ERROR("Lora.TransparentDevice '%s' is neither a serial device path nor host[:port]",
+                      portduino_config.lora_transparent_device.c_str());
+            exit(EXIT_FAILURE);
+        }
+        rIf = std::unique_ptr<RadioInterface>(new TransparentRadio(std::move(link)));
+        rIf->init(); // the link connects in the background and retries until the device answers
+        return rIf;
+#else
+        LOG_ERROR("Lora.Module transparent is not supported on this platform");
+        exit(EXIT_FAILURE);
+#endif
+    }
+
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                   RADIOLIB_PIN_TYPE busy) {
@@ -809,6 +829,29 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
     return getPacketTime(pl, received);
 }
 
+/**
+ * Calculate airtime per
+ * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+ * section 4
+ */
+uint32_t RadioInterface::computeTimeOnAirMsec(uint32_t pl) const
+{
+    float bandwidthHz = bw * 1000.0f;
+    bool headDisable = false; // we currently always use the header
+    float tSym = (1 << sf) / bandwidthHz;
+
+    bool lowDataOptEn = tSym > 16e-3 ? true : false; // Needed if symbol time is >16ms
+
+    float tPreamble = (preambleLength + 4.25f) * tSym;
+    // Semtech AN1200.13: whole 4-bit blocks first, then cr (the 4/cr denominator) coded symbols per block.
+    float numPayloadSym =
+        8 + std::max(ceilf((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr, 0.0f);
+    float tPayload = numPayloadSym * tSym;
+    float tPacket = tPreamble + tPayload;
+
+    return tPacket * 1000;
+}
+
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
 {
@@ -862,6 +905,15 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
 {
     // If we are a ROUTER, we always rebroadcast early
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+        return true;
+    }
+
+    // CLIENT_BASE always relays its favorites' packets, so relaying one heard directly early costs no extra airtime.
+    // A favorite that hears only the base needs that relay as its implicit ACK before its retransmissions run out.
+    // Ask the packet history, not the queued copy: our copy's hops no longer show how the packet reached us
+    // (a favorite router's relay keeps its hop_limit, event mode caps hop_start).
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && nodeDB && router &&
+        nodeDB->isFavorite(p->from) && router->wasHeardFromSender(p->id, p->from)) {
         return true;
     }
 
@@ -948,9 +1000,118 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 #endif
 }
 
+RadioInterface *RadioInterface::active = nullptr;
+
 RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
+    active = this;
+}
+
+// Radio pins the driver is never handed: the SPI bus and front-end pins firmware drives itself.
+// int64_t fits -1 and RADIOLIB_NC; the trailing -1 keeps the array non-empty.
+static const int64_t radioBusAndFrontEndPins[] = {
+#ifdef LORA_SCK
+    LORA_SCK,
+#ifdef LORA_MISO
+    LORA_MISO,
+#endif
+#ifdef LORA_MOSI
+    LORA_MOSI,
+#endif
+#elif defined(PIN_SPI_SCK) && !defined(ARCH_STM32WL)
+    // No LORA_SCK: the radio is on the core's default SPI bus (STM32WL's radio is internal)
+    PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI,
+#endif
+#if defined(USE_LR1110) // gated like the radio factory: an unused chip's names may not expand
+#ifdef LR1110_SPI_SCK_PIN
+    LR1110_SPI_SCK_PIN,
+#endif
+#ifdef LR1110_SPI_MISO_PIN
+    LR1110_SPI_MISO_PIN,
+#endif
+#ifdef LR1110_SPI_MOSI_PIN
+    LR1110_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR1120)
+#ifdef LR1120_SPI_SCK_PIN
+    LR1120_SPI_SCK_PIN,
+#endif
+#ifdef LR1120_SPI_MISO_PIN
+    LR1120_SPI_MISO_PIN,
+#endif
+#ifdef LR1120_SPI_MOSI_PIN
+    LR1120_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR1121)
+#ifdef LR1121_SPI_SCK_PIN
+    LR1121_SPI_SCK_PIN,
+#endif
+#ifdef LR1121_SPI_MISO_PIN
+    LR1121_SPI_MISO_PIN,
+#endif
+#ifdef LR1121_SPI_MOSI_PIN
+    LR1121_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR2021)
+#ifdef LR2021_SPI_SCK_PIN
+    LR2021_SPI_SCK_PIN,
+#endif
+#ifdef LR2021_SPI_MISO_PIN
+    LR2021_SPI_MISO_PIN,
+#endif
+#ifdef LR2021_SPI_MOSI_PIN
+    LR2021_SPI_MOSI_PIN,
+#endif
+#ifdef LR2021_POWER_EN
+    LR2021_POWER_EN,
+#endif
+#endif
+#ifdef LORA_RXEN
+    LORA_RXEN,
+#endif
+#ifdef LORA_TXEN
+    LORA_TXEN,
+#endif
+#ifdef RF95_RXEN
+    RF95_RXEN,
+#endif
+#ifdef RF95_TXEN
+    RF95_TXEN,
+#endif
+#ifdef SX126X_POWER_EN
+    SX126X_POWER_EN,
+#endif
+#ifdef SX126X_ANT_SW
+    SX126X_ANT_SW,
+#endif
+#ifdef LORA_PA_POWER
+    LORA_PA_POWER,
+#endif
+#ifdef LORA_KCT8103L_PA_CSD
+    LORA_KCT8103L_PA_CSD,
+#endif
+#ifdef LORA_KCT8103L_PA_CTX
+    LORA_KCT8103L_PA_CTX,
+#endif
+#ifdef LORA_GC1109_PA_EN
+    LORA_GC1109_PA_EN,
+#endif
+#ifdef LORA_GC1109_PA_TX_EN
+    LORA_GC1109_PA_TX_EN,
+#endif
+    -1};
+
+bool isRadioPin(uint32_t pin)
+{
+    for (int64_t radioPin : radioBusAndFrontEndPins) {
+        if (radioPin >= 0 && radioPin == (int64_t)pin)
+            return true;
+    }
+    return RadioInterface::active && RadioInterface::active->usesPin(pin);
 }
 
 bool RadioInterface::reconfigure()
@@ -1224,7 +1385,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
+    const char *channelName =
+        channels.getNumChannels()
+            ? channels.getName(channels.getPrimaryIndex())
+            : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     // After any clamp above, so this is the count applyModemConfig() tunes against
