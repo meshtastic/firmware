@@ -131,7 +131,7 @@ void test_anEnumRequestIsScopeAndBucketOnly()
 {
     meshtastic_StoreForwardPlusPlus msg;
     TEST_ASSERT_TRUE(sfppsr::buildEnumRequest(aScope(41), msg));
-    TEST_ASSERT_EQUAL_UINT32(41, msg.chain_count);
+    TEST_ASSERT_EQUAL_UINT32(41, msg.bucket);
     TEST_ASSERT_EQUAL_UINT(0, msg.message.size);
     TEST_ASSERT_EQUAL_UINT(0, msg.sr_short_ids_count);
 
@@ -180,7 +180,7 @@ void test_anItemProvideMayCarryTheChainsOwnFields()
     msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_PROVIDE;
     msg.sr_version = sfppsr::kDerivationVersion;
     msg.root_hash.size = 4;
-    msg.chain_count = 5;
+    msg.bucket = 5;
     msg.message_hash.size = 16;
 
     Scope scope;
@@ -192,11 +192,11 @@ void test_aChainMessageCarryingSetFieldsIsRecognisable()
 {
     meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
     msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
-    msg.chain_count = 12;
+    msg.bucket = 12;
     TEST_ASSERT_FALSE(sfppsr::hasSetReconciliationFields(msg));
     TEST_ASSERT_FALSE(sfppsr::isSetReconciliationType(msg.sfpp_message_type));
 
-    // chain_count is shared, so it alone proves nothing; sr_checksum is ours and cannot be innocent.
+    // bucket is shared, so it alone proves nothing; sr_checksum is ours and cannot be innocent.
     msg.sr_checksum = 1;
     TEST_ASSERT_TRUE(sfppsr::hasSetReconciliationFields(msg));
 }
@@ -347,6 +347,37 @@ void test_largest_advert_sketch_fits_one_payload()
     TEST_ASSERT_EQUAL_UINT(largest.sketch().serializedSize(), heard.sketch.serializedSize());
 }
 
+void test_advert_scope_round_trips_in_field_nine()
+{
+    const sfppsr::AdvertScope store = someScope();
+    const BucketSummary summary = summaryOf(0, 9, 12);
+
+    meshtastic_StoreForwardPlusPlus msg;
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), store, summary, msg));
+    TEST_ASSERT_EQUAL_UINT(0, msg.sr_version);
+    TEST_ASSERT_EQUAL_UINT32(sfppsr::packAdvertScope(store), msg.encapsulated_rxtime);
+    TEST_ASSERT_EQUAL_UINT32(0, msg.bucket);
+
+    Advert heard;
+    TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(msg, heard));
+    TEST_ASSERT_EQUAL_UINT8(store.version, heard.storeScope.version);
+    TEST_ASSERT_EQUAL_UINT8(store.retentionHours, heard.storeScope.retentionHours);
+    TEST_ASSERT_EQUAL_UINT8(store.windowEighths, heard.storeScope.windowEighths);
+    TEST_ASSERT_EQUAL_UINT16(store.storeSize, heard.storeScope.storeSize);
+    TEST_ASSERT_EQUAL_UINT32(summary.count(), heard.count);
+    TEST_ASSERT_TRUE(summary.checksum() == heard.checksum);
+    TEST_ASSERT_EQUAL_UINT(summary.sketch().serializedSize(), heard.sketch.serializedSize());
+
+    // The legacy parser reads sr_version=1, so it must refuse the new shape.
+    Advert legacy;
+    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, legacy));
+
+    // And the new parser must refuse the legacy shape.
+    meshtastic_StoreForwardPlusPlus old;
+    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summary, old));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(old, heard));
+}
+
 void test_aZeroShortIdIsRefusedBothWays()
 {
     std::vector<Element> ids = someIds(3);
@@ -446,6 +477,7 @@ void setup()
     RUN_TEST(test_store_size_minifloat_is_exact_to_fifteen);
     RUN_TEST(test_store_size_minifloat_steps_to_nine_sixty);
     RUN_TEST(test_largest_advert_sketch_fits_one_payload);
+    RUN_TEST(test_advert_scope_round_trips_in_field_nine);
 
     exit(UNITY_END());
 }

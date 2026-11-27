@@ -1307,7 +1307,8 @@ void SfppStore::collectScratchMatches(const uint8_t *root_hash, uint32_t bucket,
         }
 
         // A short ID only names a row in this bucket; a collision in another bucket is not a match.
-        if (sfppsr::contentBucket(computed, SFPP_HASH_SIZE) != bucket)
+        // The whole-window sentinel spans every content bucket.
+        if (bucket != sfppsr::kWholeSetBucket && sfppsr::contentBucket(computed, SFPP_HASH_SIZE) != bucket)
             continue;
         const pinsketch::Element sid = sfppsr::shortId(computed, SFPP_HASH_SIZE);
         if (std::find(ids.begin(), ids.end(), sid) == ids.end())

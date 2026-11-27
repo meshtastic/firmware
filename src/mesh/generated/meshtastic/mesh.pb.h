@@ -1210,13 +1210,13 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     uint32_t encapsulated_to;
     /* Sender of the contained message */
     uint32_t encapsulated_from;
-    /* The receive time of the message in question */
+    /* The receive time of the message in question
+ On a whole-window ADVERT this carries the packed advert scope. */
     uint32_t encapsulated_rxtime;
     /* Used in a LINK_REQUEST to specify the message X spots back from head
- On ADVERT through GONE this is the bucket index, which is the same counter
- quantised: buckets close on a fixed object count, so both sides derive the
- index from the chain counter rather than from local time. */
-    uint32_t chain_count;
+ On the set-reconciliation messages this is the content bucket: the first byte
+ of the object hash, or the reserved whole-window value. */
+    uint32_t bucket;
     /* Which derivation produced the set-reconciliation fields: the hash, the
  short-ID width, the checksum domain string, the bucket size and the
  counter origin. All of them must match before a decoded difference means
@@ -2421,7 +2421,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_encapsulated_to_tag 7
 #define meshtastic_StoreForwardPlusPlus_encapsulated_from_tag 8
 #define meshtastic_StoreForwardPlusPlus_encapsulated_rxtime_tag 9
-#define meshtastic_StoreForwardPlusPlus_chain_count_tag 10
+#define meshtastic_StoreForwardPlusPlus_bucket_tag 10
 #define meshtastic_StoreForwardPlusPlus_sr_version_tag 11
 #define meshtastic_StoreForwardPlusPlus_sr_count_tag 12
 #define meshtastic_StoreForwardPlusPlus_sr_frame_tag 13
@@ -2736,7 +2736,7 @@ X(a, STATIC,   SINGULAR, UINT32,   encapsulated_id,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_to,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_from,   8) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9) \
-X(a, STATIC,   SINGULAR, UINT32,   chain_count,      10) \
+X(a, STATIC,   SINGULAR, UINT32,   bucket,      10) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_version,       11) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_count,         12) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_frame,         13) \

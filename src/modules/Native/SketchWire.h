@@ -11,7 +11,7 @@
  * The set-reconciliation message types, on and off the wire.
  *
  * These share one protobuf with the item protocol, and three of its fields carry a second meaning
- * here: root_hash is the reconciliation scope, chain_count is the bucket index, and an advert's
+ * here: root_hash is the reconciliation scope, bucket is the content-bucket index, and an advert's
  * sketch rides in message. Each pairing is the same quantity named differently rather than a
  * borrowed slot, but the overloading has to be policed in both directions - a set-reconciliation
  * message must not populate the item's hash fields, and an item message must not carry these.
@@ -53,6 +53,10 @@ struct AdvertScope {
 // retention (0 = all), 13-18 store size as a 3+3-bit minifloat.
 constexpr uint32_t kAdvertScopeMask = (1u << 19) - 1;
 
+// The whole-window set has no bucket index; it is named by this reserved value on requests,
+// listings and item frames until the bucket leaves the wire.
+constexpr uint32_t kWholeSetBucket = 0xFFFFFFFFu;
+
 uint32_t packAdvertScope(const AdvertScope &scope);
 bool parseAdvertScope(uint32_t packed, AdvertScope &out);
 
@@ -77,6 +81,7 @@ struct Scope {
 
 struct Advert {
     Scope scope;
+    AdvertScope storeScope;
     uint32_t count = 0;
     uint64_t checksum = 0;
     pinsketch::Sketch sketch;
@@ -93,6 +98,8 @@ struct ShortIdList {
 
 // Build. Each returns false rather than emitting a message that would be rejected on arrival.
 bool buildAdvert(const Scope &scope, const BucketSummary &summary, meshtastic_StoreForwardPlusPlus &out);
+bool buildWindowAdvert(const Scope &scope, const AdvertScope &storeScope, const BucketSummary &summary,
+                       meshtastic_StoreForwardPlusPlus &out);
 bool buildItemRequest(const Scope &scope, const std::vector<pinsketch::Element> &ids, meshtastic_StoreForwardPlusPlus &out);
 bool buildEnumRequest(const Scope &scope, meshtastic_StoreForwardPlusPlus &out);
 bool buildEnumProvide(const Scope &scope, const std::vector<pinsketch::Element> &ids, uint8_t frameIndex, uint8_t frameTotal,
@@ -100,6 +107,7 @@ bool buildEnumProvide(const Scope &scope, const std::vector<pinsketch::Element> 
 
 // Parse. False means the message must be discarded without an answer.
 bool parseAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out);
+bool parseWindowAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out);
 bool parseShortIds(const meshtastic_StoreForwardPlusPlus &in, ShortIdList &out);
 bool parseScope(const meshtastic_StoreForwardPlusPlus &in, Scope &out);
 

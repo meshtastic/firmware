@@ -86,7 +86,7 @@ void writeScope(const Scope &scope, meshtastic_StoreForwardPlusPlus &out)
     out.sr_version = kDerivationVersion;
     out.root_hash.size = scope.rootPrefixLen;
     memcpy(out.root_hash.bytes, scope.rootPrefix, scope.rootPrefixLen);
-    out.chain_count = scope.bucket;
+    out.bucket = scope.bucket;
 }
 
 uint32_t packFrame(uint8_t index, uint8_t total)
@@ -124,7 +124,7 @@ bool commonHeaderValid(const meshtastic_StoreForwardPlusPlus &in, Scope &scope)
 
     scope.rootPrefixLen = in.root_hash.size;
     memcpy(scope.rootPrefix, in.root_hash.bytes, in.root_hash.size);
-    scope.bucket = in.chain_count;
+    scope.bucket = in.bucket;
     return true;
 }
 
@@ -185,6 +185,69 @@ bool buildAdvert(const Scope &scope, const BucketSummary &summary, meshtastic_St
     out.sr_checksum = summary.checksum();
     summary.sketch().serialize(out.message.bytes);
     out.message.size = sketchBytes;
+    return true;
+}
+
+bool buildWindowAdvert(const Scope &scope, const AdvertScope &storeScope, const BucketSummary &summary,
+                       meshtastic_StoreForwardPlusPlus &out)
+{
+    if (!validScope(scope))
+        return false;
+
+    const uint32_t packed = packAdvertScope(storeScope);
+    AdvertScope checked;
+    if (!parseAdvertScope(packed, checked))
+        return false;
+
+    const size_t sketchBytes = summary.sketch().serializedSize();
+    if (sketchBytes == 0 || sketchBytes > kMaxSketchBytes || sketchBytes > sizeof(out.message.bytes))
+        return false;
+
+    // The packed scope replaces sr_version on an advert. Leaving sr_version at zero is what makes
+    // an old build drop the message instead of reading it under the per-bucket rules.
+    out = meshtastic_StoreForwardPlusPlus_init_default;
+    out.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT;
+    out.root_hash.size = scope.rootPrefixLen;
+    memcpy(out.root_hash.bytes, scope.rootPrefix, scope.rootPrefixLen);
+    out.encapsulated_rxtime = packed;
+    out.sr_count = summary.count();
+    out.sr_checksum = summary.checksum();
+    summary.sketch().serialize(out.message.bytes);
+    out.message.size = sketchBytes;
+    return true;
+}
+
+bool parseWindowAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out)
+{
+    if (in.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT)
+        return false;
+    // sr_version is the legacy selector; the whole-window advert carries its version in the scope.
+    if (in.sr_version != 0)
+        return false;
+    if (carriesObjectHashFields(in))
+        return false;
+    if (in.root_hash.size < kRootPrefixBytes || in.root_hash.size > sizeof(out.scope.rootPrefix))
+        return false;
+    if (in.sr_short_ids_count != 0 || in.sr_signature.size != 0)
+        return false;
+
+    AdvertScope storeScope;
+    if (!parseAdvertScope(in.encapsulated_rxtime, storeScope))
+        return false;
+    if (!readFrame(in, out.frameIndex, out.frameTotal))
+        return false;
+
+    if (in.message.size == 0 || in.message.size > kMaxSketchBytes)
+        return false;
+    if (!out.sketch.deserialize(in.message.bytes, in.message.size))
+        return false;
+
+    out.scope.rootPrefixLen = in.root_hash.size;
+    memcpy(out.scope.rootPrefix, in.root_hash.bytes, in.root_hash.size);
+    out.scope.bucket = kWholeSetBucket;
+    out.storeScope = storeScope;
+    out.count = in.sr_count;
+    out.checksum = in.sr_checksum;
     return true;
 }
 

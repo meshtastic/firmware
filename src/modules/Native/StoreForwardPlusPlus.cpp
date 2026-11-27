@@ -89,7 +89,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         // Every archive advertises, but not in the middle of an exchange or with a pull queued.
         if (!enumExchangeActive && enumPending.empty() && !enumLateActive)
-            advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
+            advertiseWindow(root_hash_bytes, SFPP_HASH_SIZE);
         startPendingPull();
         if (enumExchangeActive)
             return 5 * 1000; // pump the probe idle and overall timeout while an exchange is in flight
@@ -131,10 +131,12 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
         lo.from = nodeDB->getNodeNum();
     const bool senderCopy = lo.from == nodeDB->getNodeNum() || mp->relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
-    if (lo.root_hash_len != 0)
+    if (lo.root_hash_len != 0) {
         store_.insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                                  RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                                  sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+        enumWritesSinceAdvert++;
+    }
     store_.fillPayloadIfEmpty(lo);
 }
 
@@ -193,10 +195,12 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
             return ProcessMessage::CONTINUE;
         }
 
-        if (lo.root_hash_len != 0)
+        if (lo.root_hash_len != 0) {
             store_.insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                                      RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                                      sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+            enumWritesSinceAdvert++;
+        }
         store_.fillPayloadIfEmpty(lo);
         return ProcessMessage::CONTINUE;
     }

@@ -813,10 +813,10 @@ struct Exchange {
 
 std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs);
 
-Exchange runExchangeFor(TestSfppModule *requester, NodeNum node)
+Exchange runExchangeFor(TestSfppModule *requester, NodeNum node, const meshtastic_MeshPacket *advertOverride = nullptr)
 {
     Exchange result;
-    meshtastic_MeshPacket advert = runAuthorityOnce();
+    meshtastic_MeshPacket advert = advertOverride ? *advertOverride : runAuthorityOnce();
 
     TEST_ASSERT_TRUE(deliver(requester, node, advert));
     result.followerSends = takeSent();
@@ -1187,7 +1187,7 @@ void test_unknownScopeAdvertIsDropped()
     msg.sr_version = sfppsr::kDerivationVersion;
     msg.root_hash.size = SFPP_HASH_SIZE;
     memset(msg.root_hash.bytes, 0x42, SFPP_HASH_SIZE);
-    msg.chain_count = 0;
+    msg.bucket = 0;
     msg.sr_count = 4;
     msg.sr_checksum = 0x1234;
     msg.message.size = 16; // a capacity-4 sketch of zeros still parses
@@ -1219,7 +1219,7 @@ void test_oversizedItemRequestIsRefused()
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
     memcpy(msg.root_hash.bytes, root, 4);
-    msg.chain_count = 0;
+    msg.bucket = 0;
     for (pb_size_t i = 0; i < sfppsr::kMaxShortIds; i++)
         msg.sr_short_ids[i] = 0x1000 + i;
     msg.sr_short_ids_count = sfppsr::kMaxShortIds + 1;
@@ -1249,7 +1249,7 @@ void test_unknownShortIdRequestServesNothing()
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
     memcpy(msg.root_hash.bytes, root, 4);
-    msg.chain_count = kBucket; // the populated bucket, so only the ID is unknown
+    msg.bucket = kBucket; // the populated bucket, so only the ID is unknown
     msg.sr_short_ids[0] = 0xDEADBEEF;
     msg.sr_short_ids_count = 1;
 
@@ -1870,7 +1870,7 @@ void test_midExchangeAdvertIsPulledAfter()
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advertHigh));
     std::vector<meshtastic_MeshPacket> reqHigh = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, reqHigh.size());
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(reqHigh[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(reqHigh[0]).bucket);
 
     // kBucket's advert arrives mid-exchange; it must be remembered, not dropped.
     meshtastic_MeshPacket advertLow;
@@ -1887,7 +1887,7 @@ void test_midExchangeAdvertIsPulledAfter()
     std::vector<meshtastic_MeshPacket> reqLow = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, reqLow.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(reqLow[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(reqLow[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(reqLow[0]).bucket);
 
     TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, reqLow[0]));
     assertConverged(kBucket);
@@ -1896,27 +1896,26 @@ void test_midExchangeAdvertIsPulledAfter()
 
 // --- advert rotation ---
 
-// A bucket that gained objects since its last advert goes ahead of the round-robin, so a follower
-// behind in it catches up on the next advert, not buckets x interval later. The changed bucket is
-// the lower one, so walking highest-first or round-robin would both name the other.
-void test_rotationServesChangedBucketFirst()
+// One whole-window advert covers a changed bucket along with the rest, so a follower behind in it
+// catches up on the next advert rather than after a rotation turn.
+void test_whole_window_advert_covers_a_changed_bucket()
 {
-    ingestIntoBucket(kHighBucket, 32);
+    ingestIntoBucket(kHighBucket, 30);
     ingestAuthority(8);
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(runAuthorityOnce()).chain_count); // mark it seen
-    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(runAuthorityOnce()).chain_count);     // mark it seen
-
     buildFollowerFromCopy(); // B has both buckets
-    ingestAuthority(2);      // A's kBucket gains two objects (now 10); the round-robin turn is kHighBucket's
+    ingestAuthority(2);      // A's kBucket gains two objects (now 10)
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
-    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(advert).chain_count); // changed bucket first
+    const meshtastic_StoreForwardPlusPlus advertMsg = decodeSfpp(advert);
+    TEST_ASSERT_EQUAL_UINT(0, advertMsg.sr_version);
+    TEST_ASSERT_EQUAL_UINT32(40, advertMsg.sr_count); // both buckets in one advert
+
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
 
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(request[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, decodeSfpp(request[0]).bucket);
 
     TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, request[0]));
     TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, kBucket).count);
@@ -1948,7 +1947,7 @@ void test_onDemandPullsNewestBucketAndCapsPacing()
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(request[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(request[0]).bucket);
 
     // The one-exchange cap: further adverts while active start nothing.
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, behind));
@@ -2016,7 +2015,7 @@ void test_secondAdvertInsideDrainIntervalSendsNoRequest()
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
     std::vector<meshtastic_MeshPacket> first = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, first.size());
-    TEST_ASSERT_EQUAL_UINT32(kLowBucket, decodeSfpp(first[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kLowBucket, decodeSfpp(first[0]).bucket);
     for (uint32_t bucket : {kBucket, kHighBucket}) { // remembered, not pulled, while busy
         TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, bucket, false, advert));
         TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
@@ -2031,7 +2030,7 @@ void test_secondAdvertInsideDrainIntervalSendsNoRequest()
     std::vector<meshtastic_MeshPacket> second = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, second.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(second[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(second[0]).chain_count); // newest bucket first
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(second[0]).bucket); // newest bucket first
 
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildProvideFromDir(dirA, kHighBucket)));
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
@@ -2043,7 +2042,7 @@ void test_secondAdvertInsideDrainIntervalSendsNoRequest()
     std::vector<meshtastic_MeshPacket> third = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, third.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(third[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(third[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(third[0]).bucket);
 }
 
 // A lost provide is remembered and retried on a later advert that names a different bucket, after
@@ -2072,7 +2071,7 @@ void test_lostEnumProvideRetriesWithinBackoff()
     std::vector<meshtastic_MeshPacket> retry = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, retry.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(retry[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).chain_count); // the hole's bucket, not the advert's
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).bucket); // the hole's bucket, not the advert's
 
     TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, retry[0]));
     assertConverged(kHighBucket);
@@ -2142,7 +2141,7 @@ void test_failedTailPullRetriesAsTail()
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> retry = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, retry.size());
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).bucket);
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, retry[0]));
     std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
@@ -2258,7 +2257,7 @@ void test_pullRetryOffNamedAdvertRePullsAtOnce()
     std::vector<meshtastic_MeshPacket> again = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, again.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(again[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(again[0]).bucket);
 }
 
 // With PullRetry on, a named-mismatch advert also bypasses the backoff; the backoff only
@@ -2437,7 +2436,7 @@ void test_fourRequestersShareTheServingWindow()
         msg.sr_version = sfppsr::kDerivationVersion;
         msg.root_hash.size = 4;
         memcpy(msg.root_hash.bytes, root, 4);
-        msg.chain_count = kBucket;
+        msg.bucket = kBucket;
         for (pb_size_t i = 0; i < 8; i++)
             msg.sr_short_ids[i] = ids[p * 8 + i];
         msg.sr_short_ids_count = 8;
@@ -2472,7 +2471,7 @@ void requestOneItemFrom(NodeNum peer, const uint8_t *root, pinsketch::Element id
     msg.sr_version = sfppsr::kDerivationVersion;
     msg.root_hash.size = 4;
     memcpy(msg.root_hash.bytes, root, 4);
-    msg.chain_count = kBucket;
+    msg.bucket = kBucket;
     msg.sr_short_ids[0] = id;
     msg.sr_short_ids_count = 1;
     meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
@@ -2672,7 +2671,8 @@ void runSketchCase(uint32_t total, uint32_t missing)
     buildFollowerFromCopy();
     TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, missing));
 
-    meshtastic_MeshPacket advert = runAuthorityOnce();
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert)); // the legacy c=4 sketch
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
@@ -2709,7 +2709,7 @@ void test_sketchResolvesFour()
     runSketchCase(20, 4);
 }
 
-// More than four differences cannot decode, so the list exchange takes over.
+// More than four differences cannot decode in the legacy c=4 advert, so the list exchange takes over.
 void test_sketchFallsBackAtSixteen()
 {
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
@@ -2717,7 +2717,9 @@ void test_sketchFallsBackAtSixteen()
     buildFollowerFromCopy();
     TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 16));
 
-    Exchange exchange = runExchange();
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+    Exchange exchange = runExchangeFor(follower, FOLLOWER_NODE, &advert);
     TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
     TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
     TEST_ASSERT_EQUAL_UINT(16, exchange.itemFrames);
@@ -2864,7 +2866,7 @@ void test_full_root_advert_with_our_root_is_pulled()
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(sent[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(sent[0]).bucket);
 }
 
 // --- broadcast listing ---
@@ -2876,7 +2878,7 @@ uint32_t countType(const std::vector<meshtastic_MeshPacket> &sent, meshtastic_St
     uint32_t n = 0;
     for (const auto &p : sent) {
         const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(p);
-        if (msg.sfpp_message_type == type && (bucket < 0 || msg.chain_count == (uint32_t)bucket))
+        if (msg.sfpp_message_type == type && (bucket < 0 || msg.bucket == (uint32_t)bucket))
             n++;
     }
     return n;
@@ -2958,7 +2960,8 @@ void test_broadcast_listing_serves_all_hearers()
         cSent.push_back(out);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, countType(cSent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST),
                                      "an archive that heard the listing must not ask for it again");
-    TEST_ASSERT_EQUAL_UINT32(1, countType(cSent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, kBucket));
+    TEST_ASSERT_EQUAL_UINT32(
+        1, countType(cSent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, sfppsr::kWholeSetBucket));
     meshtastic_MeshPacket cItem;
     for (const auto &out : cSent)
         if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
@@ -2992,7 +2995,7 @@ void test_overheard_listing_suppresses_own_request()
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, lowAdvert));
     std::vector<meshtastic_MeshPacket> lowRequest = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, lowRequest.size());
-    TEST_ASSERT_EQUAL_UINT32(kLowBucket, decodeSfpp(lowRequest[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kLowBucket, decodeSfpp(lowRequest[0]).bucket);
 
     meshtastic_MeshPacket advert;
     TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
@@ -3087,7 +3090,7 @@ void test_overheard_listing_keeps_other_archives_pending_pull()
     meshtastic_MeshPacket request;
     for (const auto &out : sent)
         if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST &&
-            decodeSfpp(out).chain_count == kBucket)
+            decodeSfpp(out).bucket == kBucket)
             request = out;
     TEST_ASSERT_EQUAL_UINT32(AUTHORITY_NODE, decodeSfpp(request).encapsulated_to);
 
@@ -3155,7 +3158,7 @@ void test_overheard_listing_pulls_from_lister_and_keeps_other_pending()
     meshtastic_MeshPacket itemRequest;
     for (const auto &out : sent)
         if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST &&
-            decodeSfpp(out).chain_count == kBucket)
+            decodeSfpp(out).bucket == kBucket)
             itemRequest = out;
     TEST_ASSERT_EQUAL_UINT32(UNKNOWN_NODE, itemRequest.to);
 
@@ -3180,7 +3183,7 @@ void test_overheard_listing_pulls_from_lister_and_keeps_other_pending()
     meshtastic_MeshPacket request;
     for (const auto &out : after)
         if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST &&
-            decodeSfpp(out).chain_count == kBucket)
+            decodeSfpp(out).bucket == kBucket)
             request = out;
     TEST_ASSERT_EQUAL_UINT32(AUTHORITY_NODE, decodeSfpp(request).encapsulated_to);
 }
@@ -3366,7 +3369,7 @@ void test_writer_missed_object_is_found_by_advert()
 
     std::vector<meshtastic_MeshPacket> sent = tick(follower, FOLLOWER_NODE);
     TEST_ASSERT_EQUAL_UINT32(0, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)); // no push
-    TEST_ASSERT_EQUAL_UINT32(1, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT, kBucket));
+    TEST_ASSERT_EQUAL_UINT32(1, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT));
     meshtastic_MeshPacket advert;
     for (const auto &out : sent)
         if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT)
@@ -3374,7 +3377,8 @@ void test_writer_missed_object_is_found_by_advert()
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, advert));
     std::vector<meshtastic_MeshPacket> request = takeSent();
-    TEST_ASSERT_EQUAL_UINT32(1, countType(request, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, kBucket));
+    TEST_ASSERT_EQUAL_UINT32(
+        1, countType(request, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, sfppsr::kWholeSetBucket));
     TEST_ASSERT_EQUAL_UINT32(FOLLOWER_NODE, decodeSfpp(request[0]).encapsulated_to);
 
     // A third archive's in-sync advert, heard mid-pull.
@@ -3565,6 +3569,178 @@ void test_frameLimitConfigRoundTrips()
     TEST_ASSERT_EQUAL_STRING(first.c_str(), second.c_str());
 }
 
+// --- whole-window advert (Wdd) ---
+
+// One advert names the whole window, not a rotating bucket: its count spans every content bucket.
+void test_whole_window_advert_replaces_the_bucket_advert()
+{
+    ingestIntoBucket(kLowBucket, 3);
+    ingestAuthority(5);
+    ingestIntoBucket(kHighBucket, 2);
+
+    const meshtastic_StoreForwardPlusPlus advert = decodeSfpp(runAuthorityOnce());
+    TEST_ASSERT_EQUAL_UINT(0, advert.sr_version); // the legacy per-bucket advert sets sr_version=1
+    TEST_ASSERT_EQUAL_UINT32(10, advert.sr_count);
+    TEST_ASSERT_TRUE(advert.encapsulated_rxtime != 0); // field 9 carries the packed scope now
+}
+
+// The sketch capacity follows the writes since the previous advert: c = clamp(ceil(1.5 x writes), 4, 48).
+void test_advert_capacity_follows_writes_and_caps_at_48()
+{
+    ingestAuthority(8); // ceil(1.5 x 8) = 12
+    TEST_ASSERT_EQUAL_UINT(12 * 4, decodeSfpp(runAuthorityOnce()).message.size);
+
+    // Nothing written since: the floor.
+    TEST_ASSERT_EQUAL_UINT(4 * 4, decodeSfpp(runAuthorityOnce()).message.size);
+
+    ingestAuthority(40); // 1.5 x 40 = 60, capped to 48
+    TEST_ASSERT_EQUAL_UINT(48 * 4, decodeSfpp(runAuthorityOnce()).message.size);
+}
+
+// The new advert carries the packed scope in field 9, declares the store, and omits sr_version.
+void test_new_advert_carries_scope_and_no_sr_version()
+{
+    portduino_config.sfpp_retention_hours = 48;
+    portduino_config.sfpp_window_hours = 24;
+    ingestAuthority(4);
+
+    const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(runAuthorityOnce());
+    TEST_ASSERT_EQUAL_UINT(0, msg.sr_version);
+    TEST_ASSERT_EQUAL_UINT(4, msg.root_hash.size);
+
+    sfppsr::Advert advert;
+    TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(msg, advert));
+    TEST_ASSERT_EQUAL_UINT8(sfppsr::kAdvertSchemaVersion, advert.storeScope.version);
+    TEST_ASSERT_EQUAL_UINT8(48, advert.storeScope.retentionHours);
+    TEST_ASSERT_EQUAL_UINT8(4, advert.storeScope.windowEighths);
+    TEST_ASSERT_EQUAL_UINT16(4, advert.storeScope.storeSize);
+}
+
+// The old parser selects on sr_version=1, so a new scope advert is not misread as an old one.
+void test_old_parser_rejects_the_new_scope_advert()
+{
+    ingestAuthority(4);
+    sfppsr::Advert legacy;
+    TEST_ASSERT_FALSE(sfppsr::parseAdvert(decodeSfpp(runAuthorityOnce()), legacy));
+}
+
+// A count gap larger than the advert's capacity cannot decode; the receiver goes straight to the
+// whole-window listing instead of asking for a sketch it cannot resolve.
+void test_count_gap_skips_the_sketch_decode()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(60); // ceil(1.5 x 60) caps at 48
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(execSql(dirB, "delete from channel_messages;"));
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    sfppsr::Advert parsed;
+    TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(decodeSfpp(advert), parsed));
+    TEST_ASSERT_EQUAL_UINT(48, parsed.sketch.capacity());
+    TEST_ASSERT_GREATER_THAN_UINT32(parsed.sketch.capacity(), parsed.count);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, decodeSfpp(sent[0]).bucket);
+}
+
+// Objects missing from several content buckets converge from one whole-window advert and listing.
+void test_whole_window_listing_converges()
+{
+    ingestIntoBucket(kLowBucket, 2);
+    ingestIntoBucket(kBucket, 2);
+    ingestIntoBucket(kHighBucket, 2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 1));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 4));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 6));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
+    TEST_ASSERT_EQUAL_UINT(3, exchange.itemFrames);
+    assertSameStore(dirA, dirB);
+}
+
+// The whole-window listing is not truncated at eight provide frames; a 40-ID window at four IDs
+// per frame arrives as ten frames and is reassembled into one request.
+void test_whole_window_listing_splits_past_eight_frames()
+{
+    const std::string yaml = "StoreAndForward:\n"
+                             "  Enabled: true\n"
+                             "  DBPath: " +
+                             dirA +
+                             "/\n"
+                             "  Repair: enum\n"
+                             "  EnumDrainMs: 100\n"
+                             "  MaxIdsPerFrame: 4\n";
+    TEST_ASSERT_TRUE(loadSfppYaml(yaml));
+
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(execSql(dirB, "delete from channel_messages;"));
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> provides;
+    for (uint32_t i = 0; i < 60 && provides.size() < 10; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE)
+                provides.push_back(out);
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(10, provides.size());
+
+    uint32_t listed = 0;
+    for (const auto &provide : provides) {
+        const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(provide);
+        TEST_ASSERT_EQUAL_UINT32(10, msg.sr_frame >> 8);
+        TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, msg.bucket);
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, provide));
+        listed += msg.sr_short_ids_count;
+    }
+    TEST_ASSERT_EQUAL_UINT(40, listed);
+
+    uint32_t itemFrames = 0;
+    uint32_t requested = 0;
+    for (const auto &out : takeSent()) {
+        const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(out);
+        if (msg.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            continue;
+        itemFrames++;
+        requested += msg.sr_short_ids_count;
+    }
+    TEST_ASSERT_EQUAL_UINT(10, itemFrames);
+    TEST_ASSERT_EQUAL_UINT(40, requested);
+}
+
+// The mixed-build bridge: a new archive still hears the old sr_version=1 per-bucket advert and
+// pulls that bucket from it.
+void test_old_bucket_advert_is_still_accepted()
+{
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(requests[0]).bucket);
+    TEST_ASSERT_EQUAL_UINT(1, finishPull(follower, FOLLOWER_NODE, requests[0]));
+    assertConverged();
+}
+
 void loop() {}
 
 void setup()
@@ -3598,7 +3774,7 @@ void setup()
     RUN_TEST(test_listenOnlyBlocksLegacyShim);
     RUN_TEST(test_corruptScratchRowIsNotPromoted);
     RUN_TEST(test_midExchangeAdvertIsPulledAfter);
-    RUN_TEST(test_rotationServesChangedBucketFirst);
+    RUN_TEST(test_whole_window_advert_covers_a_changed_bucket);
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
     RUN_TEST(test_item_in_flight_is_not_requested_twice);
@@ -3644,6 +3820,14 @@ void setup()
     RUN_TEST(test_neverHeardTextArrivesFromAnotherArchive);
     RUN_TEST(test_maxIdsPerFrameSplitsListingIntoThreeFrames);
     RUN_TEST(test_frameLimitConfigRoundTrips);
+    RUN_TEST(test_whole_window_advert_replaces_the_bucket_advert);
+    RUN_TEST(test_advert_capacity_follows_writes_and_caps_at_48);
+    RUN_TEST(test_new_advert_carries_scope_and_no_sr_version);
+    RUN_TEST(test_old_parser_rejects_the_new_scope_advert);
+    RUN_TEST(test_count_gap_skips_the_sketch_decode);
+    RUN_TEST(test_whole_window_listing_converges);
+    RUN_TEST(test_whole_window_listing_splits_past_eight_frames);
+    RUN_TEST(test_old_bucket_advert_is_still_accepted);
     UNITY_END();
 }
 

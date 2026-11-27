@@ -72,6 +72,39 @@ void copyScopeRoot(const uint8_t *root, size_t rootLen, sfppsr::Scope &scope, ui
     memcpy(scope.rootPrefix, root, n);
     scope.bucket = bucket;
 }
+
+// The elapsed-time window an advert covers, and the sketch capacity that follows its writes.
+static uint32_t configuredRetentionHours()
+{
+    uint32_t hours = portduino_config.sfpp_retention_hours;
+    if (hours < 1)
+        hours = 1;
+    if (hours > 72)
+        hours = 72;
+    return hours;
+}
+
+static uint32_t configuredWindowHours()
+{
+    const uint32_t retention = configuredRetentionHours();
+    uint32_t hours = portduino_config.sfpp_window_hours;
+    if (hours < 1)
+        hours = 1;
+    if (hours > retention)
+        hours = retention;
+    return hours;
+}
+
+static uint32_t advertCapacity(uint32_t writes)
+{
+    uint32_t capacity = (writes * 3 + 1) / 2; // ceil(1.5 x writes)
+    if (capacity < 4)
+        capacity = 4;
+    if (capacity > sfppsr::kMaxSketchCapacity)
+        capacity = sfppsr::kMaxSketchCapacity;
+    return capacity;
+}
+
 } // namespace
 
 // --- Arm C: detector + short-ID enumeration ---
@@ -105,7 +138,7 @@ bool StoreForwardPlusPlusModule::sendEnumMessage(const meshtastic_StoreForwardPl
     } else {
         scope.rootPrefixLen = msg.root_hash.size;
         memcpy(scope.rootPrefix, msg.root_hash.bytes, msg.root_hash.size);
-        scope.bucket = msg.chain_count;
+        scope.bucket = msg.bucket;
     }
 
     int ids = -1;
@@ -459,17 +492,25 @@ void StoreForwardPlusPlusModule::expireEnumLate()
 
 bool StoreForwardPlusPlusModule::bucketMatchesPeer(const uint8_t *root_hash, uint32_t bucket)
 {
+    const bool wholeWindow = bucket == sfppsr::kWholeSetBucket;
+    const uint32_t windowS = configuredWindowHours() * 60 * 60;
     if (!enumPeerSummaryKnown) {
         // An overheard listing has no checksum: matching means holding every listed ID.
         std::vector<pinsketch::Element> own;
-        store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+        if (wholeWindow)
+            store_.collectWindowIds(root_hash, SFPP_HASH_SIZE, windowS, 0, own);
+        else
+            store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
         std::sort(own.begin(), own.end());
         std::vector<pinsketch::Element> listed = enumProvideIds;
         std::sort(listed.begin(), listed.end());
         return std::includes(own.begin(), own.end(), listed.begin(), listed.end());
     }
     sfppsr::BucketSummary local(4);
-    store_.buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
+    if (wholeWindow)
+        store_.buildWindowSummary(root_hash, SFPP_HASH_SIZE, 4, windowS, 0, local);
+    else
+        store_.buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
     return local.count() == enumPeerCount && local.checksum() == enumPeerChecksum;
 }
 
@@ -573,10 +614,74 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
         enumAdvertSeen.push_back({bucket, summary.count(), summary.checksum()});
 }
 
+void StoreForwardPlusPlusModule::rememberPeerScope(NodeNum peer, const uint8_t *root_hash, const sfppsr::AdvertScope &scope)
+{
+    const uint32_t nowMs = Time::getMillis();
+    for (auto &entry : enumPeerScopes) {
+        if (entry.peer == peer && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0) {
+            entry.scope = scope;
+            entry.heardMs = nowMs;
+            return;
+        }
+    }
+    if (enumPeerScopes.size() >= 16)
+        enumPeerScopes.erase(enumPeerScopes.begin());
+    EnumPeerScope entry = {};
+    memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
+    entry.peer = peer;
+    entry.scope = scope;
+    entry.heardMs = nowMs;
+    enumPeerScopes.push_back(entry);
+}
+
+void StoreForwardPlusPlusModule::advertiseWindow(uint8_t *root_hash, size_t root_hash_len)
+{
+    const uint32_t retentionHours = configuredRetentionHours();
+    const uint32_t windowHours = configuredWindowHours();
+
+    sfppsr::AdvertScope storeScope;
+    storeScope.version = sfppsr::kAdvertSchemaVersion;
+    storeScope.retentionHours = (uint8_t)retentionHours;
+    if (windowHours >= retentionHours) {
+        storeScope.windowEighths = 0; // the whole retention
+    } else {
+        uint32_t eighths = (windowHours * 8 + retentionHours - 1) / retentionHours;
+        if (eighths < 1)
+            eighths = 1;
+        if (eighths > 7)
+            eighths = 7;
+        storeScope.windowEighths = (uint8_t)eighths;
+    }
+    const uint32_t storeSize = store_.countCanonObjects(root_hash, root_hash_len);
+    storeScope.storeSize = (uint16_t)(storeSize > 0xFFFF ? 0xFFFF : storeSize);
+
+    const uint32_t capacity = advertCapacity(enumWritesSinceAdvert);
+    sfppsr::BucketSummary summary(capacity);
+    const uint32_t windowS = windowHours * 60 * 60;
+    if (!store_.buildWindowSummary(root_hash, root_hash_len, capacity, windowS, 0, summary) || summary.count() == 0)
+        return;
+
+    // The full-root cadence still lets a blank follower join until the no-root change lands.
+    const bool fullRoot = (enumAdvertTick++ % kEnumFullRootEvery) == (kEnumFullRootEvery - 1);
+    sfppsr::Scope scope;
+    copyScopeRoot(root_hash, root_hash_len, scope, sfppsr::kWholeSetBucket, fullRoot);
+
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildWindowAdvert(scope, storeScope, summary, msg))
+        return;
+    if (!sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size))
+        return;
+
+    enumWritesSinceAdvert = 0;
+}
+
 void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
     sfppsr::Advert advert;
-    if (!sfppsr::parseAdvert(*t, advert))
+    // The packed scope selects the new shape; sr_version=1 selects the legacy per-bucket advert that
+    // a build from before this change still sends.
+    const bool window = sfppsr::parseWindowAdvert(*t, advert);
+    if (!window && !sfppsr::parseAdvert(*t, advert))
         return;
 
     uint8_t derived[SFPP_HASH_SIZE] = {0};
@@ -611,17 +716,56 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     }
     enumForeignRootLoggedPeer = 0;
 
+    if (window)
+        rememberPeerScope(mp.from, root, advert.storeScope);
+
     logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
     if (portduino_config.sfpp_enum_listen_only)
         return; // listen-only: never request
 
-    // A failed pull is retried on the next advert from that peer, whichever bucket it names.
+    // A failed pull is retried on the next advert from that peer, whichever scope it names.
     for (const auto &entry : enumPending) {
         if (entry.authority == mp.from && entry.retryAfterMs != 0 && memcmp(entry.root, root, SFPP_HASH_SIZE) == 0 &&
             Throttle::deadlinePassedAt(Time::getMillis(), entry.retryAfterMs)) {
             setIntervalFromNow(10);
             break;
         }
+    }
+
+    if (window) {
+        const uint32_t capacity = advert.sketch.capacity();
+        if (capacity == 0)
+            return;
+
+        // Compare the whole window at the peer's capacity. The margin is zero here; the
+        // elapsed-time edge handling lands with the scope requests.
+        const uint32_t windowS = configuredWindowHours() * 60 * 60;
+        sfppsr::BucketSummary local(capacity);
+        store_.buildWindowSummary(root, SFPP_HASH_SIZE, capacity, windowS, 0, local);
+
+        if (local.count() == advert.count && local.checksum() == advert.checksum)
+            return;
+
+        const uint32_t bucket = sfppsr::kWholeSetBucket;
+        if (enumExchangeActive) {
+            if (bucket != enumExchangeBucket)
+                addPendingBucket(root, mp.from, bucket, advert.count, advert.checksum, 0);
+            return;
+        }
+
+        if (enumBucketSuppressed(root, bucket, advert.count, advert.checksum))
+            return;
+
+        beginEnumExchange(root, bucket, mp.from, advert.count, advert.checksum);
+        enumPeerTip = 0;
+        const uint32_t own = local.count();
+        const uint32_t gap = advert.count > own ? advert.count - own : own - advert.count;
+        // A gap wider than the sketch capacity cannot decode; go straight to the listing.
+        if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH && gap <= capacity &&
+            trySketchExchange(advert, local, root, bucket, mp.from))
+            return;
+        requestEnumList(root, bucket, mp.from);
+        return;
     }
 
     const uint32_t advertTip = t->encapsulated_rxtime; // the sender's content-bucket count
@@ -675,7 +819,10 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
     }
 
     std::vector<pinsketch::Element> own;
-    store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+    if (bucket == sfppsr::kWholeSetBucket)
+        store_.collectWindowIds(root_hash, SFPP_HASH_SIZE, configuredWindowHours() * 60 * 60, 0, own);
+    else
+        store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
     std::sort(own.begin(), own.end());
     own.erase(std::unique(own.begin(), own.end()), own.end());
 
@@ -761,7 +908,10 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
     logEnum("rx", "enum_req", scope, mp.decoded.payload.size, mp.from, -1, 0, 1);
 
     std::vector<pinsketch::Element> ids;
-    if (!store_.collectBucketIds(root, SFPP_HASH_SIZE, scope.bucket, ids))
+    const bool wholeWindow = scope.bucket == sfppsr::kWholeSetBucket;
+    const bool haveIds = wholeWindow ? store_.collectWindowIds(root, SFPP_HASH_SIZE, configuredWindowHours() * 60 * 60, 0, ids)
+                                     : store_.collectBucketIds(root, SFPP_HASH_SIZE, scope.bucket, ids);
+    if (!haveIds)
         return;
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
@@ -843,7 +993,10 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
 void StoreForwardPlusPlusModule::actOnListing(const uint8_t *root, uint32_t bucket, NodeNum peer)
 {
     std::vector<pinsketch::Element> own;
-    store_.collectBucketIds(root, SFPP_HASH_SIZE, bucket, own);
+    if (bucket == sfppsr::kWholeSetBucket)
+        store_.collectWindowIds(root, SFPP_HASH_SIZE, configuredWindowHours() * 60 * 60, 0, own);
+    else
+        store_.collectBucketIds(root, SFPP_HASH_SIZE, bucket, own);
     std::sort(enumProvideIds.begin(), enumProvideIds.end());
     enumProvideIds.erase(std::unique(enumProvideIds.begin(), enumProvideIds.end()), enumProvideIds.end());
     std::sort(own.begin(), own.end());
@@ -935,7 +1088,10 @@ void StoreForwardPlusPlusModule::handleOverheardListing(NodeNum peer, const uint
         return;
 
     std::vector<pinsketch::Element> own;
-    store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, list.scope.bucket, own);
+    if (list.scope.bucket == sfppsr::kWholeSetBucket)
+        store_.collectWindowIds(root_hash, SFPP_HASH_SIZE, configuredWindowHours() * 60 * 60, 0, own);
+    else
+        store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, list.scope.bucket, own);
     std::sort(own.begin(), own.end());
     std::vector<pinsketch::Element> listed = heard->ids;
     std::sort(listed.begin(), listed.end());
@@ -1032,14 +1188,18 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
     if (ids.empty() || ids.size() > sfppsr::kMaxShortIds)
         return;
 
+    const bool wholeWindow = bucket == sfppsr::kWholeSetBucket;
+    const uint32_t windowS = configuredWindowHours() * 60 * 60;
     std::vector<pinsketch::Element> fresh;
     if (enumCollisionProbe) {
         fresh = ids; // a probe deliberately asks for every object a short ID names
     } else {
         for (pinsketch::Element id : ids) {
+            const bool held = wholeWindow
+                                  ? !store_.collectWindowObjectsByShortId(root_hash, SFPP_HASH_SIZE, id, windowS, 0).empty()
+                                  : store_.bucketHoldsShortId(root_hash, bucket, id);
             if (itemInFlight(root_hash, bucket, id) || std::find(enumWanted.begin(), enumWanted.end(), id) != enumWanted.end() ||
-                std::find(enumLateWanted.begin(), enumLateWanted.end(), id) != enumLateWanted.end() ||
-                store_.bucketHoldsShortId(root_hash, bucket, id))
+                std::find(enumLateWanted.begin(), enumLateWanted.end(), id) != enumLateWanted.end() || held)
                 continue;
             fresh.push_back(id);
         }
@@ -1096,8 +1256,11 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             continue;
 
         // A short ID can name more than one stored object; serve every one so a collided pair
-        // cannot hide behind a single row.
-        const std::vector<SfppStore::ObjectRow> rows = store_.collectObjectsByShortId(root, list.scope.bucket, wanted);
+        // cannot hide behind a single row. The whole-window sentinel has no bucket to key on.
+        const std::vector<SfppStore::ObjectRow> rows =
+            list.scope.bucket == sfppsr::kWholeSetBucket
+                ? store_.collectWindowObjectsByShortId(root, SFPP_HASH_SIZE, wanted, configuredWindowHours() * 60 * 60, 0)
+                : store_.collectObjectsByShortId(root, list.scope.bucket, wanted);
         const bool served = !rows.empty();
         for (const auto &row : rows) {
             const uint32_t to = row.to;
@@ -1114,7 +1277,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             copyScopeRoot(root, SFPP_HASH_SIZE, scope, list.scope.bucket, false);
             // Every frame names its bucket so an overhearing archive can place it.
             for (auto &frame : frames)
-                frame.chain_count = list.scope.bucket;
+                frame.bucket = list.scope.bucket;
             const NodeNum dest = portduino_config.sfpp_item_transport == SFPP_ITEM_DIRECT ? mp.from : NODENUM_BROADCAST;
             queueItemFrames(frames, mp.from, dest, scope, wanted);
         }
@@ -1218,7 +1381,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     else if (enumLateActive && mp.from == enumLatePeer)
         copyScopeRoot(enumLateRoot, SFPP_HASH_SIZE, logScope, enumLateBucket, false);
     else
-        logScope.bucket = t->chain_count;
+        logScope.bucket = t->bucket;
     int frameIndex = t->frame != 0 ? (t->frame & 0xFF) : 0;
     int frameTotal = t->frame != 0 ? (t->frame >> 8 & 0xFF) : 1;
     logEnum("rx", "item_frame", logScope, mp.decoded.payload.size, mp.from, -1, frameIndex, frameTotal);
@@ -1232,12 +1395,16 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     uint8_t hash[SFPP_HASH_SIZE];
     sfppframe::messageHash(replay.ciphertext.data(), replay.ciphertext.size(), replay.to, replay.from, replay.id, hash);
     const pinsketch::Element shortId = sfppsr::shortId(hash, sizeof(hash));
+    // The whole-window sentinel names no content bucket, so the object is filed by its own hash.
+    auto fileBucket = [&](uint32_t requested) {
+        return requested == sfppsr::kWholeSetBucket ? sfppsr::contentBucket(hash, sizeof(hash)) : requested;
+    };
 
     // 1. An object this exchange asked for, from any peer that holds it.
     auto wantedIt = std::find(enumWanted.begin(), enumWanted.end(), shortId);
     if (enumExchangeActive && wantedIt != enumWanted.end()) {
         const bool isNew = !store_.isInDB(hash, sizeof(hash));
-        if (!store_.storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
+        if (!store_.storeRecoveredObject(replay, enumExchangeRoot, fileBucket(enumExchangeBucket)))
             return;
         forgetItemInFlight(shortId);
         enumLastItemMs = Time::getMillis();
@@ -1286,7 +1453,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     // 2. A late object for a recently ended exchange.
     auto lateIt = std::find(enumLateWanted.begin(), enumLateWanted.end(), shortId);
     if (enumLateActive && lateIt != enumLateWanted.end()) {
-        store_.storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
+        store_.storeRecoveredObject(replay, enumLateRoot, fileBucket(enumLateBucket));
         forgetItemInFlight(shortId);
         enumLateWanted.erase(lateIt);
         if (enumLateWanted.empty())
@@ -1319,7 +1486,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     const uint32_t bucket = heard ? heard->bucket : flight->bucket;
     if (store_.isInDB(hash, sizeof(hash)))
         return;
-    if (!store_.storeRecoveredObject(replay, root, bucket))
+    if (!store_.storeRecoveredObject(replay, root, fileBucket(bucket)))
         return;
     forgetItemInFlight(shortId);
 
@@ -1351,8 +1518,9 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         store_.removeFromScratch(bad.data(), SFPP_HASH_SIZE);
 
     for (const auto &row : matches) {
+        const uint32_t fileBucket = bucket == sfppsr::kWholeSetBucket ? sfppsr::contentBucket(row.hash, SFPP_HASH_SIZE) : bucket;
         store_.insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, "",
-                                 root_hash, bucket, row.from == nodeDB->getNodeNum());
+                                 root_hash, fileBucket, row.from == nodeDB->getNodeNum());
         store_.removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
         enumPromoted.push_back({sid, {}});

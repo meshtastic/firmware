@@ -119,6 +119,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // --- Arm C: detector + short-ID enumeration (StoreAndForward.Repair = enum) ---
 
     void advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len);
+    void advertiseWindow(uint8_t *root_hash, size_t root_hash_len);
+    void rememberPeerScope(NodeNum peer, const uint8_t *root_hash, const sfppsr::AdvertScope &scope);
     void expireEnumExchange();
     bool sendEnumMessage(const meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type, size_t sketchBytes = 0,
                          const sfppsr::Scope *scopeOverride = nullptr);
@@ -215,6 +217,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Enumeration (arm C) state. One exchange is in flight at a time; the next advert tick retries.
     sfppframe::Reassembler enumReassembler{16};
     uint32_t enumBucketCursor = 0;
+    // Canonical text writes since the previous advert; the next advert's sketch capacity follows it.
+    uint32_t enumWritesSinceAdvert = 0;
 
     bool enumExchangeActive = false;
     bool enumExchangeSucceeded = false;
@@ -233,7 +237,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     NodeNum enumProvidePeer = 0;
     uint8_t enumProvideTotal = 0;
     uint8_t enumProvideSeenCount = 0;
-    bool enumProvideSeen[8] = {};
+    bool enumProvideSeen[255] = {};
     std::vector<pinsketch::Element> enumProvideIds;
 
     std::vector<pinsketch::Element> enumWanted;
@@ -263,6 +267,15 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint64_t checksum;
     };
     std::vector<EnumSuppression> enumSuppressed;
+
+    // What each peer last declared about its store: schema, retention, window and size.
+    struct EnumPeerScope {
+        uint8_t root[SFPP_HASH_SIZE];
+        NodeNum peer;
+        sfppsr::AdvertScope scope;
+        uint32_t heardMs;
+    };
+    std::vector<EnumPeerScope> enumPeerScopes;
 
     std::vector<EnumRequester> enumTxQueues;
     size_t enumQueueCursor = 0;
@@ -303,7 +316,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         NodeNum peer;
         uint8_t total;
         uint8_t seenCount;
-        bool seen[8];
+        bool seen[255];
         std::vector<pinsketch::Element> ids;
         uint32_t heardMs;
     };
