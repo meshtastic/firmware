@@ -47,7 +47,9 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 
     status = (file->read(buf, count) == (int)count);
 
-    if (file->available() == 0)
+    // Signal EOF only on a short read: nanopb decrements bytes_left after a successful one, so zeroing
+    // it here wraps it, and a packed array ending the file then reads past its own length.
+    if (!status && file->available() == 0)
         stream->bytes_left = 0;
 
     return status;
