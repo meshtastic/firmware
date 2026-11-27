@@ -2,6 +2,20 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
+// The pre-TX CAD exits straight to TX when the channel is clear (CAD exit mode LBT), with the payload written before
+// it, instead of a verdict read and a separate SetTx. The chip keys up with no host call, so it must drive its own RF
+// switch. A busy scan leaves the chip in standby, with no CAD->RX handoff; the caller restarts RX.
+#ifndef LR11X0_CAD_LBT
+#ifdef LR11X0_DIO_AS_RF_SWITCH
+#define LR11X0_CAD_LBT 1
+#else
+#define LR11X0_CAD_LBT 0
+#endif
+#endif
+#if LR11X0_CAD_LBT && !defined(LR11X0_DIO_AS_RF_SWITCH)
+#error "LR11X0_CAD_LBT needs the chip's DIOs on the RF switch"
+#endif
+
 // After TX_DONE the LR11x0 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead.
 //
@@ -62,6 +76,18 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
+
+#if LR11X0_CAD_LBT
+    /** No SetTx for the packet a clear LBT scan has already put on air */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** Id and length of the packet a clear LBT scan put on air, or 0 */
+    uint32_t lbtSentId = 0;
+    size_t lbtSentLen = 0;
+    /** The LBT scan: true if the channel is busy; a clear one has put scanForTx on air unless the scan failed */
+    bool scanThenTransmit(ChannelScanConfig_t &cfg);
+    /** stageMode(TX) and startChannelScan(cfg) for the LBT scan, as raw commands; the chip must be in standby */
+    int16_t startLbtScan(const ChannelScanConfig_t &cfg, size_t numbytes);
+#endif
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
