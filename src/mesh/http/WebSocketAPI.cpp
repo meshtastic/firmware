@@ -114,9 +114,6 @@ void MeshWebsocketHandler::shut(uint16_t status)
 
 void MeshWebsocketHandler::onMessage(WebsocketInputStreambuf *input)
 {
-    // Text frames are ignored, as on the Portduino route.
-    if (input->getOpCode() != OPCODE_BINARY)
-        return;
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
     const std::streamsize len = input->sgetn((char *)buf, sizeof(buf));
 
@@ -127,6 +124,10 @@ void MeshWebsocketHandler::onMessage(WebsocketInputStreambuf *input)
         shut(CLOSE_TOO_BIG);
         return;
     }
+    // Text frames are ignored, as on the Portduino route. They are read first so the payload is
+    // consumed in chunks here instead of byte by byte in the library's discard().
+    if (input->getOpCode() != OPCODE_BINARY)
+        return;
     if (webServerThread)
         webServerThread->markActivity();
     api->handleToRadio(buf, (size_t)len);
