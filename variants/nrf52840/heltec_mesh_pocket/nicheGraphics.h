@@ -61,6 +61,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.optionalMenuItems.nextTile = true;
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
