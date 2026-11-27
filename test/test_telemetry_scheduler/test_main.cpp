@@ -506,7 +506,7 @@ static void test_batch_takesUnpublishedOldestFirstWithTimeOrDelta()
     RamTelemetryStore<meshtastic_AirQualityMetrics> store(8);
     store.push(aq(1), 0, 0);            // no clock, first reading: neither
     store.push(aq(2), 0, 360);          // no clock: gap
-    store.push(aq(3), 1700000000, 360); // clock valid: time wins
+    store.push(aq(3), 1700000000, 360); // clock valid: time, and the gap back to the untimed one
     store.markPublished(0, TELEMETRY_PUBLISHED_MESH);
 
     uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
@@ -524,10 +524,35 @@ static void test_batch_takesUnpublishedOldestFirstWithTimeOrDelta()
     TEST_ASSERT_TRUE(h.readings[0].has_delta_secs);
     TEST_ASSERT_EQUAL_UINT32(360, h.readings[0].delta_secs);
     TEST_ASSERT_TRUE(h.readings[1].has_time);
-    TEST_ASSERT_FALSE(h.readings[1].has_delta_secs);
+    TEST_ASSERT_TRUE(h.readings[1].has_delta_secs);
+    TEST_ASSERT_EQUAL_UINT32(360, h.readings[1].delta_secs);
 
     // The other channels still see all three
     TEST_ASSERT_EQUAL_UINT16(3, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MQTT, 10, buf, sizeof(buf), size, idx));
+}
+
+// A clockless node that gets a clock mid-batch: [A(delta), B(delta), C(time)] can only be dated back from C
+// if C also carries the gap from B. Later timed readings need no gap.
+static void test_batch_firstTimedAfterUntimedKeepsDelta()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(8);
+    store.push(aq(1), 0, 360);
+    store.push(aq(2), 1700000000, 360);
+    store.push(aq(3), 1700000360, 360);
+    store.markPublished(0, TELEMETRY_PUBLISHED_MESH); // the untimed one went in an earlier batch
+
+    uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    TEST_ASSERT_EQUAL_UINT16(2, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
+
+    meshtastic_TelemetryRecordHistory h;
+    TEST_ASSERT_TRUE(decodeBatch(buf, size, h));
+    TEST_ASSERT_TRUE(h.readings[0].has_time);
+    TEST_ASSERT_TRUE(h.readings[0].has_delta_secs);
+    TEST_ASSERT_EQUAL_UINT32(360, h.readings[0].delta_secs);
+    TEST_ASSERT_TRUE(h.readings[1].has_time);
+    TEST_ASSERT_FALSE(h.readings[1].has_delta_secs);
 }
 
 static void test_batch_capsAtMaxReadings()
@@ -762,6 +787,7 @@ void setup()
     RUN_TEST(test_sensors_sleptOnlyWhenNextReadOutlastsWarmUp);
     RUN_TEST(test_sensors_leadIsSlowestSleepingSensor);
     RUN_TEST(test_batch_takesUnpublishedOldestFirstWithTimeOrDelta);
+    RUN_TEST(test_batch_firstTimedAfterUntimedKeepsDelta);
     RUN_TEST(test_batch_capsAtMaxReadings);
     RUN_TEST(test_batch_shrinksToFit);
     RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);

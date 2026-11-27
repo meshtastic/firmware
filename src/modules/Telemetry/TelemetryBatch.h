@@ -60,13 +60,15 @@ template <typename T> meshtastic_Telemetry toTelemetry(const TelemetryReading<T>
     return t;
 }
 
-/// A record carries its time when the clock was valid, else the gap since the previous one
-template <typename T> void fillTelemetryRecord(meshtastic_TelemetryRecord &r, const TelemetryReading<T> &reading)
+/// A record carries its time when the clock was valid, else the gap since the previous one. The first timed record
+/// after an untimed one carries the gap too, so the untimed ones can be dated back from it.
+template <typename T>
+void fillTelemetryRecord(meshtastic_TelemetryRecord &r, const TelemetryReading<T> &reading, bool previousUntimed = false)
 {
     setTelemetryRecordMetrics(r, reading.metrics);
     r.has_time = reading.time != 0;
     r.time = reading.time;
-    r.has_delta_secs = !r.has_time && reading.deltaSecs != 0;
+    r.has_delta_secs = (!r.has_time || previousUntimed) && reading.deltaSecs != 0;
     r.delta_secs = r.has_delta_secs ? reading.deltaSecs : 0;
 }
 
@@ -138,11 +140,16 @@ uint16_t encodeTelemetryBatch(TelemetryStore<T> &store, TelemetryPublishChannel 
 
     uint16_t taken = 0;
     TelemetryReading<T> reading;
+    bool previousUntimed = false;
     for (uint16_t i = 0; i < store.size() && taken < maxReadings; i++) {
-        if (!store.at(i, reading) || (reading.publishedMask & ch))
+        if (!store.at(i, reading))
             continue;
-        fillTelemetryRecord(batch->readings[taken], reading);
-        indices[taken++] = i;
+        const bool untimed = reading.time == 0;
+        if (!(reading.publishedMask & ch)) {
+            fillTelemetryRecord(batch->readings[taken], reading, previousUntimed);
+            indices[taken++] = i;
+        }
+        previousUntimed = untimed;
     }
 
     for (; taken > 0; taken--) {
