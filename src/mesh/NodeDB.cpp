@@ -967,12 +967,14 @@ template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
 
 // Keep `map` within MAX_SATELLITE_NODES ahead of inserting `incoming` (the
 // tier-1/tier-2 split: only the freshest MAX_SATELLITE_NODES nodes carry
-// satellite payloads). Caller holds satelliteMutex.
+// satellite payloads), and stop it growing while heap is low. Caller holds satelliteMutex.
 template <typename Map> void evictSatelliteOverCap(NodeDB &db, Map &map, NodeNum incoming)
 {
-    if (map.size() < MAX_SATELLITE_NODES || map.count(incoming))
+    if (map.count(incoming))
         return;
-    evictStalestSatellite(db, map);
+    // Free heap is read only for a new key, the one case where the insert allocates
+    if (satelliteInsertMustEvict(map.size(), false, memGet.getFreeHeap()))
+        evictStalestSatellite(db, map);
 }
 } // namespace
 

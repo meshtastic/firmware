@@ -309,6 +309,31 @@ struct PackedEnvironmentMetrics {
     bool unpack(meshtastic_EnvironmentMetrics &out) const;
 };
 
+/// Whether a satellite insert must first evict an entry: a new key at MAX_SATELLITE_NODES, or a new key while free heap is
+/// below MINIMUM_SAFE_FREE_HEAP, so the maps stop growing under memory pressure. Updating an existing key never evicts.
+inline bool satelliteInsertMustEvict(size_t mapSize, bool keyPresent, uint32_t freeHeap)
+{
+    return !keyPresent && (mapSize >= MAX_SATELLITE_NODES || freeHeap < MINIMUM_SAFE_FREE_HEAP);
+}
+
+/// Admits at most `cap` last_heard values, freshest first; values tied at the cutoff take the remaining slots in call order.
+struct FreshestAdmission {
+    uint32_t cutoff = 0;
+    size_t tieSlots = SIZE_MAX;
+    bool admit(uint32_t lastHeard)
+    {
+        if (lastHeard != cutoff)
+            return lastHeard > cutoff;
+        if (tieSlots == 0)
+            return false;
+        --tieSlots;
+        return true;
+    }
+};
+
+/// Builds the admission for the `cap` freshest in `heard`; admits everything when all of them fit. Reorders `heard`.
+FreshestAdmission freshestAdmission(std::vector<uint32_t> &heard, size_t cap);
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
