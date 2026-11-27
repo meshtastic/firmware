@@ -2397,7 +2397,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                        this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
-                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
+                if (uiconfig.settings_lock && isSettingsFrame(this->ui->getUiState()->currentFrame)) {
+                    // DeviceUIConfig.settings_lock: keep messaging usable, but hide the menus that change settings.
+                    showSimpleBanner("Settings locked", 2000);
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
 #if BASEUI_HAS_GAMES
                 } else if (gamesModule && framesetInfo.positions.games != 255 &&
@@ -2460,6 +2463,17 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 
     return 0;
+}
+
+// Frames whose long-press menu changes device settings. Blocked while DeviceUIConfig.settings_lock is set.
+bool Screen::isSettingsFrame(uint8_t frame) const
+{
+    if (frame == 255)
+        return false;
+    const auto &pos = framesetInfo.positions;
+    return frame == pos.system || frame == pos.gps || frame == pos.clock || frame == pos.lora || frame == pos.wifi ||
+           frame == pos.nodelist_nodes || frame == pos.nodelist_location || frame == pos.nodelist_lastheard ||
+           frame == pos.nodelist_hopsignal || frame == pos.nodelist_distance || frame == pos.nodelist_bearings;
 }
 
 int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
