@@ -1302,7 +1302,7 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, bool allowRegionSwap)
 {
     char err_string[160];
     float check_bw;
@@ -1321,23 +1321,40 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             // of clamping the preset, as long as the previous region was itself one of the trio.
             const RegionInfo *swapRegion = regionSwapForPreset(loraConfig.region, loraConfig.modem_preset);
             if (swapRegion) {
-                if (!clamp) {
-                    // Validation must still fail so callers route into the clamp, but quietly:
-                    // the clamp will accept this config by swapping regions, so don't record a
-                    // critical error or alarm the user over a change that is about to succeed.
-                    LOG_INFO("Preset %s implies region swap %s to %s, defer to clamp", presetName, newRegion->name,
+                if (allowRegionSwap) {
+                    if (!clamp) {
+                        // Validation must still fail so callers route into the clamp, but quietly:
+                        // the clamp will accept this config by swapping regions, so don't record a
+                        // critical error or alarm the user over a change that is about to succeed.
+                        LOG_INFO("Preset %s implies region swap %s to %s, defer to clamp", presetName, newRegion->name,
+                                 swapRegion->name);
+                        return false;
+                    }
+                    snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                              swapRegion->name);
-                    return false;
-                }
-                snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
-                         swapRegion->name);
-                LOG_INFO("%s", err_string);
-                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_REGION_SWAP,
-                                      meshtastic_LogRecord_Level_INFO);
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_REGION_SWAP,
+                                          meshtastic_LogRecord_Level_INFO);
 
-                loraConfig.region = swapRegion->code;
-                newRegion = swapRegion;
-                check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                    loraConfig.region = swapRegion->code;
+                    newRegion = swapRegion;
+                    check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                } else {
+                    if (!clamp) {
+                        LOG_INFO("Preset %s invalid for %s, defer to clamp", presetName, newRegion->name);
+                        return false;
+                    }
+                    const char *defaultName =
+                        DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true);
+                    snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s, using %s", presetName, newRegion->name,
+                             defaultName);
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string,
+                                          meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION,
+                                          meshtastic_LogRecord_Level_INFO);
+                    loraConfig.modem_preset = newRegion->getDefaultPreset();
+                    check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                }
                 preset_valid = true;
             }
         }
@@ -1431,9 +1448,9 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
     return checkOrClampConfigLora(copy, false);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool allowRegionSwap)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    checkOrClampConfigLora(loraConfig, true, allowRegionSwap);
 }
 
 uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
