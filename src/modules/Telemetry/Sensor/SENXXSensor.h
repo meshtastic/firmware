@@ -294,6 +294,7 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     bool vocStateFromSensor();
     bool vocStateToSensor();
     bool vocStateStable();
+    uint32_t pendingPollMs(uint32_t now);
     bool vocStateRecent(uint32_t now);
 
   public:

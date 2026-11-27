@@ -37,6 +37,8 @@
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
+#define min_telemetry_read_interval_secs (6 * 60) // stored readings, so a batch never outgrows what the mesh drains
+#define default_telemetry_phone_interval_secs 60  // reads while a client is connected
 
 enum class TrafficType { POSITION, TELEMETRY };
 
