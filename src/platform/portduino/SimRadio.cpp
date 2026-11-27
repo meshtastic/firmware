@@ -185,12 +185,13 @@ void SimRadio::onNotify(uint32_t notification)
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
-                    startSend(txp);
-                    // Packet has been sent, count it toward our TX airtime utilization.
-                    uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
-                    airTime->logAirtime(TX_LOG, xmitMsec);
+                    if (startSend(txp)) {
+                        // Packet has been sent, count it toward our TX airtime utilization.
+                        uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
+                        airTime->logAirtime(TX_LOG, xmitMsec);
 
-                    notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                        notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                    }
                 }
             }
         } else {
@@ -203,14 +204,22 @@ void SimRadio::onNotify(uint32_t notification)
 }
 
 /** start an immediate transmit */
-void SimRadio::startSend(meshtastic_MeshPacket *txp)
+bool SimRadio::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Start low level send", txp);
     isReceiving = false;
     size_t numbytes = beginSending(txp);
+    if (numbytes == 0) {
+        completeSending();
+        isReceiving = true;
+        return false;
+    }
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
-    if (!p)
-        return;
+    if (!p) {
+        completeSending();
+        isReceiving = true;
+        return false;
+    }
 
     // A packet we originate that's encrypted for someone else (a PKI DM, channel == 0) can't be
     // decrypted here. Attempting it only logs a spurious "no suitable channel" miss, and the
@@ -270,6 +279,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     service->sendQueueStatusToPhone(router->getQueueStatus(), 0, p->id);
     service->sendToPhone(p); // Sending back to simulator
     service->loop();         // Process the send immediately
+    return true;
 }
 
 // Simulates device received a packet via the LoRa chip
