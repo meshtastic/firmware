@@ -27,6 +27,7 @@
 
 // Sensors
 #include "Sensor/CGRadSensSensor.h"
+#include "Sensor/DYPA01Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
 
@@ -323,6 +324,8 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // SPI device, probed in initDevice()
     addSensor<MAX31865Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
+    // Not an I2C device; initDevice returns false unless the variant enables DYP-A01.
+    addSensor<DYPA01Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
     addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
     addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
 #if __has_include(<DFRobot_LarkWeatherStation.h>)

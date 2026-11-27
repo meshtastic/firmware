@@ -96,3 +96,10 @@
 #define GPS_TX_PIN (38) // This is for bits going TOWARDS the GPS
 #define GPS_RX_PIN (39) // This is for bits going TOWARDS the CPU
 #define GPS_THREAD_INTERVAL 50
+
+// Opt-in env heltec-v4-dyp. Serial2 on GPIO33/GPIO6: Serial1 is GNSS, GPIO5 is V4.3 PA_CTX.
+#ifdef DYP_A01_ENABLE
+#define HAS_DYP_A01 1
+#define DYP_A01_UART_RX 33 // MCU RX, sensor TX (White). Free on S3R2; PSRAM on the R8.
+#define DYP_A01_UART_TX 6  // MCU TX, sensor RX (Yellow)
+#endif
