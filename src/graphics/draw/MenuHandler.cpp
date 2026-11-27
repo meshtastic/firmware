@@ -330,7 +330,8 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         LOG_WARN("Setting config.lora.tx_enabled to true");
         config.lora.tx_enabled = true;
     }
-    service->reloadConfig(changes);
+    // Region/preset/HAM-mode change - the only LoRa radio parameters this menu can touch.
+    service->applyConfigChange(changes, CONFIG_APPLY_RADIO);
 }
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
@@ -506,8 +507,7 @@ void menuHandler::deviceRolePicker()
         } else if (selected == devicerole_tracker) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
         }
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -558,7 +558,7 @@ void menuHandler::FrequencySlotPicker()
         }
 
         config.lora.channel_num = selected;
-        service->reloadConfig(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO);
     };
 
     screen->showOverlayBanner(bannerOptions);
@@ -614,7 +614,7 @@ static BannerOverlayOptions buildRegionPresetBanner()
         config.lora.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
         config.lora.channel_num = 0;        // Reset to default channel for the preset
         config.lora.override_frequency = 0; // Clear any custom frequency
-        service->reloadConfig(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO);
     };
     return bannerOptions;
 }
@@ -666,7 +666,7 @@ void menuHandler::twelveHourPicker()
         } else {
             config.display.use_12h_clock = false;
         }
-        service->reloadConfig(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -826,7 +826,7 @@ void menuHandler::TZPicker()
             config.device.tzdef[sizeof(config.device.tzdef) - 1] = '\0';
 
             setenv("TZ", config.device.tzdef, 1);
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         });
 
     int initialSelection = 0;
@@ -941,7 +941,7 @@ void menuHandler::messageResponseMenu()
             auto &chan = channels.getByIndex(chIndex);
             if (chan.settings.has_module_settings) {
                 chan.settings.module_settings.is_muted = !chan.settings.module_settings.is_muted;
-                nodeDB->saveToDisk();
+                nodeDB->saveToDisk(SEGMENT_CHANNELS); // channel setting: don't rewrite every other proto
             }
 
         } else if (selected == DeleteMenu) {
@@ -1935,7 +1935,7 @@ void menuHandler::manageNodeMenu()
             // refusal changed nothing and shouldn't trigger a prefs save.
             if (changed) {
                 nodeDB->notifyObservers(true);
-                nodeDB->saveToDisk();
+                nodeDB->saveToDisk(SEGMENT_NODEDATABASE); // NodeInfoLite bit: only the node DB changed
             }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
@@ -1972,8 +1972,7 @@ void menuHandler::nodeNameLengthMenu()
                                                        }
 
                                                        config.display.use_long_node_name = option.value;
-                                                       saveUIConfig();
-                                                       service->reloadConfig(SEGMENT_CONFIG);
+                                                       service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
                                                        LOG_INFO("Setting names to %s", option.value ? "long" : "short");
                                                    });
 
@@ -1998,12 +1997,12 @@ void menuHandler::resetNodeDBMenu()
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
             disableBluetooth();
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            requestReboot();
         } else if (selected == 2) {
             LOG_INFO("Initiate node-db reset, keep favorites");
             nodeDB->resetNodes(1);
             disableBluetooth();
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            requestReboot();
         } else if (selected == 0) {
             menuQueue = NodeBaseMenu;
             screen->runNow();
@@ -2093,7 +2092,7 @@ void menuHandler::GPSToggleMenu()
                 playGPSDisableBeep();
                 gps->disable();
             }
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         });
 
     int initialSelection = 0;
@@ -2150,9 +2149,10 @@ void menuHandler::GPSFormatMenu()
             return;
         }
 
+        // uiconfig field: saveUIConfig() writes /prefs/uiconfig.proto, which is the only file
+        // this touches. No config.proto write, so no reloadConfig().
         uiconfig.gps_format = option.value;
         saveUIConfig();
-        service->reloadConfig(SEGMENT_CONFIG);
     };
 
     BannerOverlayOptions bannerOptions;
@@ -2195,15 +2195,10 @@ void menuHandler::GPSSmartPositionMenu()
             menuQueue = PositionBaseMenu;
             screen->runNow();
         } else if (selected == 1) {
-            config.position.position_broadcast_smart_enabled = true;
             saveUIConfig();
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            setSmartPositionEnabled(true);
         } else if (selected == 2) {
-            config.position.position_broadcast_smart_enabled = false;
-            saveUIConfig();
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            setSmartPositionEnabled(false);
         }
     };
     bannerOptions.InitialSelected = config.position.position_broadcast_smart_enabled ? 1 : 2;
@@ -2257,8 +2252,7 @@ void menuHandler::GPSUpdateIntervalMenu()
 
         if (selected != 0) {
             saveUIConfig();
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         }
     };
 
@@ -2347,8 +2341,8 @@ void menuHandler::GPSPositionBroadcastMenu()
 
         if (selected != 0) {
             saveUIConfig();
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            // Read live by PositionModule's broadcast scheduler every cycle - no reboot needed.
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
     };
 
@@ -2423,7 +2417,7 @@ void menuHandler::BuzzerModeMenu()
     bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
-        service->reloadConfig(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
     };
     bannerOptions.InitialSelected = config.device.buzzer_mode;
     screen->showOverlayBanner(bannerOptions);
@@ -2499,8 +2493,7 @@ void menuHandler::switchToMUIMenu()
         if (selected == 1) {
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
             config.bluetooth.enabled = false;
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -2521,7 +2514,7 @@ void menuHandler::rebootMenu()
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             messageStore.saveToFlash();
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            requestReboot();
         } else {
             menuQueue = PowerMenu;
             screen->runNow();
@@ -2868,13 +2861,11 @@ void menuHandler::wifiToggleMenu()
         if (selected == Wifi_disable) {
             config.network.wifi_enabled = false;
             config.bluetooth.enabled = true;
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         } else if (selected == Wifi_enable) {
             config.network.wifi_enabled = true;
             config.bluetooth.enabled = false;
-            service->reloadConfig(SEGMENT_CONFIG);
-            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -3151,15 +3142,15 @@ void menuHandler::frameTogglesMenu()
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_env_telemetry) {
-            moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
+            toggleTelemetryScreen(moduleConfig.telemetry.environment_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_aq_telemetry) {
-            moduleConfig.telemetry.air_quality_screen_enabled = !moduleConfig.telemetry.air_quality_screen_enabled;
+            toggleTelemetryScreen(moduleConfig.telemetry.air_quality_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_power) {
-            moduleConfig.telemetry.power_screen_enabled = !moduleConfig.telemetry.power_screen_enabled;
+            toggleTelemetryScreen(moduleConfig.telemetry.power_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         }
@@ -3183,10 +3174,10 @@ void menuHandler::displayUnitsMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == MetricUnits) {
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         } else if (selected == ImperialUnits) {
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL;
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         } else {
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
             screen->runNow();
@@ -3208,11 +3199,11 @@ void menuHandler::messageBubblesMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == ShowBubbles) {
             config.display.enable_message_bubbles = true;
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
             LOG_INFO("Message bubbles enabled");
         } else if (selected == HideBubbles) {
             config.display.enable_message_bubbles = false;
-            service->reloadConfig(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
             LOG_INFO("Message bubbles disabled");
         } else {
             menuHandler::menuQueue = menuHandler::ScreenOptionsMenu;
@@ -3516,8 +3507,23 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     menuQueue = MenuNone;
 }
 
-// Flips the mute bit on a node and persists. Returns without writing if the node is unknown, so a
-// stale pickedNodeNum can't cause a pointless flash write.
+// One telemetry screen flag, flipped and persisted. These live in moduleConfig rather than the
+// hiddenFrames blob that Screen::toggleFrameVisibility() writes, so they need their own save.
+void menuHandler::toggleTelemetryScreen(bool &flag)
+{
+    flag = !flag;
+    service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+}
+
+// Read live by PositionModule's smart-broadcast path on every send, so no reboot is needed.
+void menuHandler::setSmartPositionEnabled(bool enabled)
+{
+    config.position.position_broadcast_smart_enabled = enabled;
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+}
+
+// Flips the mute bit on a node and persists just the node database. Returns without writing if
+// the node is unknown, so a stale pickedNodeNum can't cause a pointless flash write.
 void menuHandler::toggleNodeMuted(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(nodeNum);
@@ -3528,7 +3534,7 @@ void menuHandler::toggleNodeMuted(uint32_t nodeNum)
     nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
     LOG_INFO(wasMuted ? "Unmuted node 0x%08x" : "Muted node 0x%08x", nodeNum);
     nodeDB->notifyObservers(true);
-    nodeDB->saveToDisk();
+    nodeDB->saveToDisk(SEGMENT_NODEDATABASE); // NodeInfoLite bit: only the node DB changed
 }
 
 void menuHandler::saveUIConfig()
