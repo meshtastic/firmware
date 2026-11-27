@@ -19,6 +19,8 @@ class WebServerThread : private concurrency::OSThread
     WebServerThread();
     uint32_t requestRestart = 0;
     void markActivity();
+    /// Run on the next loop pass instead of waiting out the idle interval.
+    void wake() { setIntervalFromNow(0); }
 
   protected:
     virtual int32_t runOnce() override;
@@ -38,6 +40,7 @@ class WebServerThread
     WebServerThread() {}
     uint32_t requestRestart = 0;
     void markActivity() {}
+    void wake() {}
 };
 
 inline WebServerThread *webServerThread = nullptr;

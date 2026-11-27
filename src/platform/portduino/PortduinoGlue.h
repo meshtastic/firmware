@@ -70,7 +70,8 @@ enum lora_module_enum {
     use_lr1120,
     use_lr1121,
     use_llcc68,
-    use_lr2021
+    use_lr2021,
+    use_transparent
 };
 
 // RF switch modes as the YAML names them; each family supports a different subset. The neutral
@@ -137,6 +138,9 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+// Pack /dev/spidev<bus>.<device> into HardwareSPI's host byte (low nibble bus,
+// high nibble device). Returns -1 when the path cannot be represented.
+int spiHostFromDevicePath(const std::string &devicePath);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 // A node number written as `0xea618fb4`, `!a28e145b`, or decimal. Shared by loadConfig and --check.
@@ -162,10 +166,10 @@ struct commandSensorConfig {
 
 extern struct portduino_config_struct {
     // Lora
-    std::map<lora_module_enum, std::string> loraModules = {{use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},
-                                                           {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
-                                                           {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"},
-                                                           {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}};
+    std::map<lora_module_enum, std::string> loraModules = {
+        {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"},
+        {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"},
+        {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}, {use_transparent, "transparent"}};
 
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
@@ -185,6 +189,7 @@ extern struct portduino_config_struct {
     bool has_device_id = false;
     uint8_t device_id[16] = {0};
     std::string lora_spi_dev = "";
+    std::string lora_transparent_device = ""; // Lora.TransparentDevice: serial path or host[:port]
     std::string lora_usb_serial_num = "";
     int lora_spi_dev_int = 0;
     int lora_default_gpiochip = 0;
@@ -392,6 +397,8 @@ extern struct portduino_config_struct {
         // Lora
         out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
+        if (lora_module == use_transparent)
+            out << YAML::Key << "TransparentDevice" << YAML::Value << lora_transparent_device;
 
         for (const auto *lora_pin : all_pins) {
             if (lora_pin->config_section == "Lora" && lora_pin->enabled) {
@@ -531,7 +538,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
             for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
-                    out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+                    out << YAML::Key << "Panel" << YAML::Value << screen_name.second;
             }
             for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {
@@ -542,7 +549,12 @@ extern struct portduino_config_struct {
                     out << YAML::EndMap;
                 }
             }
-            out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
+            if (!display_spi_dev.empty()) {
+                std::string displaySpiDev = display_spi_dev;
+                if (displaySpiDev.rfind("/dev/", 0) == 0)
+                    displaySpiDev.erase(0, 5);
+                out << YAML::Key << "spidev" << YAML::Value << displaySpiDev;
+            }
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
             if (displayWidth)
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
@@ -593,17 +605,24 @@ extern struct portduino_config_struct {
         // Touchscreen
         if (touchscreen_spi_dev != "") {
             out << YAML::Key << "Touchscreen" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
+            std::string touchSpiDev = touchscreen_spi_dev;
+            if (touchSpiDev.rfind("/dev/", 0) == 0)
+                touchSpiDev.erase(0, 5);
+            out << YAML::Key << "spidev" << YAML::Value << touchSpiDev;
             out << YAML::Key << "BusFrequency" << YAML::Value << touchscreenBusFrequency;
             switch (touchscreenModule) {
             case xpt2046:
                 out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+                break;
             case stmpe610:
                 out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+                break;
             case gt911:
                 out << YAML::Key << "Module" << YAML::Value << "GT911";
+                break;
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+                break;
             }
             for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {

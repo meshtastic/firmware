@@ -1,4 +1,5 @@
 #include "meshUtils.h"
+#include "configuration.h"
 #include "target_specific.h"
 #include <string.h>
 

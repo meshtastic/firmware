@@ -732,7 +732,6 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_hop_scaling/` - Hop scaling histogram and required-hop logic
-- `test_http_content_handler/` - HTTP handling
 - `test_mac_from_string/` - MAC address parsing
 - `test_mesh_module/` - Module framework
 - `test_meshpacket_serializer/` - Packet serialization

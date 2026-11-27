@@ -2,9 +2,11 @@
 
 #ifdef SEEED_WIO_TRACKER_L2
 
+// Before AudioBoard.h, whose audio_driver::GpioPin would make GpioLogic.h's own GpioPin ambiguous
+#include "GpioLogic.h"
+
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
-#include "GpioLogic.h"
 #include "SPILock.h"
 #include "WakeKey.h"
 #include "driver/gpio.h"
@@ -17,7 +19,8 @@
 extern PCA95X5_CLS io;
 
 // The GNSS rail is on the expander, so the GPS enable has to drive it there.
-class GnssRail : public GpioPin
+// ::GpioPin: the -tft build also sees audio_driver::GpioPin through AudioBoard.h
+class GnssRail : public ::GpioPin
 {
   public:
     void set(bool on) override

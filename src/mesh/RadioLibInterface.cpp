@@ -58,7 +58,7 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
-    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+    : NotifiedWorkerThread("RadioIf"), csPin(cs), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
 
@@ -137,6 +137,16 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 /** Our ISR code currently needs this to find our active instance
  */
 RadioLibInterface *RadioLibInterface::instance;
+
+bool RadioLibInterface::usesPin(uint32_t pin) const
+{
+    const uint32_t pins[] = {csPin, module.getIrq(), module.getRst(), module.getGpio(), rfSwitchRxPin, rfSwitchTxPin};
+    for (uint32_t p : pins) {
+        if (p != RADIOLIB_NC && p == pin)
+            return true;
+    }
+    return false;
+}
 
 /** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
 #define BUSY_RX_LOG_INTERVAL_MS 30000
@@ -784,6 +794,12 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
+        if (shouldRebroadcastEarlyLikeRouter(p)) {
+            // Keep the early slot, a late relay would defeat its purpose
+            if (!txQueue.enqueue(p))
+                packetPool.release(p);
+            return;
+        }
         p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {

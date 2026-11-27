@@ -782,6 +782,11 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         LOG_INFO("BLE conn %u peer MTU %u (target %u)", connHandle, pServer->getPeerMTU(connHandle), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
+
+        // checkIsConnected() reads this handle. In NO_PIN mode the link is never encrypted, so
+        // onAuthenticationComplete() never runs; without this, PhoneAPI's next notify treats the
+        // client as gone and closes its session mid-config while the link stays up.
+        nimbleBluetoothConnHandle = connHandle;
     }
 
     void onDisconnect(BLEServer *pServer, struct ble_gap_conn_desc *desc)

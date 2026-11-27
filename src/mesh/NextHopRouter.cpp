@@ -11,6 +11,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+#include "modules/RepeatScalingModule.h"
 
 #if USERPREFS_EVENT_MODE
 static void capEventRelayHops(meshtastic_MeshPacket *packet)
@@ -298,6 +299,9 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? FloodingRouter::send(tosend) : NextHopRouter::send(tosend);
                     if (res == ERRNO_SHOULD_RELEASE)
                         packetPool.release(tosend);
+                    // Duplicates arrive encrypted; keep the portnum, but only for a copy the queue took
+                    else if (res == ERRNO_OK && repeatScalingModule)
+                        repeatScalingModule->noteScheduled(p);
 
                     return true;
                 }
