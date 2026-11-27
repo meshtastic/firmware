@@ -217,14 +217,13 @@ static const uint8_t _message_GLL[] = {
     0x00        // Reserved
 };
 
-// Disable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
-// the DOP (Dilution of Precision)
+// Enable GSA. GSA - GPS DOP and active satellites, which carries the 2D/3D fix type and PDOP/VDOP.
 static const uint8_t _message_GSA[] = {
     0xF0, 0x02, // NMEA ID for GSA
     0x00,       // Rate for DDC
-    0x00,       // Rate for UART1
+    0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x00,       // Rate for USB useful for native linux
+    0x01,       // Rate for USB useful for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
