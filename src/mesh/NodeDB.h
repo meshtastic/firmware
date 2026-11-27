@@ -316,9 +316,23 @@ inline bool satelliteInsertMustEvict(size_t mapSize, bool keyPresent, uint32_t f
     return !keyPresent && (mapSize >= MAX_SATELLITE_NODES || freeHeap < MINIMUM_SAFE_FREE_HEAP);
 }
 
-/// The lowest last_heard that still ranks among the `cap` freshest in `heard`, or 0 when all of them fit.
-/// Ties at the cutoff all pass, so the result can admit a few more than `cap`. Reorders `heard`.
-uint32_t freshestLastHeardCutoff(std::vector<uint32_t> &heard, size_t cap);
+/// Admits at most `cap` last_heard values, freshest first; values tied at the cutoff take the remaining slots in call order.
+struct FreshestAdmission {
+    uint32_t cutoff = 0;
+    size_t tieSlots = SIZE_MAX;
+    bool admit(uint32_t lastHeard)
+    {
+        if (lastHeard != cutoff)
+            return lastHeard > cutoff;
+        if (tieSlots == 0)
+            return false;
+        --tieSlots;
+        return true;
+    }
+};
+
+/// Builds the admission for the `cap` freshest in `heard`; admits everything when all of them fit. Reorders `heard`.
+FreshestAdmission freshestAdmission(std::vector<uint32_t> &heard, size_t cap);
 
 class NodeDB
 {

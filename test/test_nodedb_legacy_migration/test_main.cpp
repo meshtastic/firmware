@@ -493,17 +493,45 @@ static void test_overCapLegacyFile_truncatesToMaxNumNodes(void)
 }
 
 // The upgrade gives satellites only to the cap's freshest legacy nodes. Native builds have a satellite cap above
-// their hot cap, so a whole-boot fixture never reaches the bound; the ranking is checked directly with small caps.
-static void test_freshestLastHeardCutoff_keepsTheCapFreshest(void)
+// their hot cap, so a whole-boot fixture never reaches the bound; the admission is checked directly with small caps.
+static size_t admitAll(FreshestAdmission admission, const std::vector<uint32_t> &rows)
 {
-    std::vector<uint32_t> heard = {50, 10, 40, 20, 30};
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(30, freshestLastHeardCutoff(heard, 3), "cap 3 keeps 50, 40 and 30");
+    size_t admitted = 0;
+    for (uint32_t lastHeard : rows)
+        admitted += admission.admit(lastHeard) ? 1 : 0;
+    return admitted;
+}
+
+static void test_freshestAdmission_keepsTheCapFreshest(void)
+{
+    const std::vector<uint32_t> rows = {50, 10, 40, 20, 30};
+    std::vector<uint32_t> heard = rows;
+    FreshestAdmission admission = freshestAdmission(heard, 3);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(30, admission.cutoff, "cap 3 keeps 50, 40 and 30");
+    TEST_ASSERT_TRUE(admission.admit(50));
+    TEST_ASSERT_FALSE_MESSAGE(admission.admit(20), "older than the cutoff");
+    TEST_ASSERT_EQUAL_size_t(3, admitAll(freshestAdmission(heard, 3), rows));
 
     std::vector<uint32_t> fits = {5, 1};
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, freshestLastHeardCutoff(fits, 2), "everything fits: no cutoff");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(2, admitAll(freshestAdmission(fits, 2), {5, 1}), "everything fits: all admitted");
+}
 
-    std::vector<uint32_t> ties = {7, 7, 7, 1};
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(7, freshestLastHeardCutoff(ties, 2), "every entry tied at the cutoff passes");
+// A clockless node records last_heard 0 for every peer, so one tie can span the whole table. The cap must still hold.
+static void test_freshestAdmission_boundsTiesAtTheCutoff(void)
+{
+    const std::vector<uint32_t> allZero(120, 0);
+    std::vector<uint32_t> heard = allZero;
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(40, admitAll(freshestAdmission(heard, 40), allZero), "120 tied rows, cap 40");
+
+    const std::vector<uint32_t> rows = {9, 7, 7, 7, 1};
+    heard = rows;
+    FreshestAdmission admission = freshestAdmission(heard, 3);
+    TEST_ASSERT_EQUAL_UINT32(7, admission.cutoff);
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(2, admission.tieSlots, "9 is newer, so two slots remain for the 7s");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(3, admitAll(admission, rows), "9 and the first two 7s, in row order");
+
+    heard = rows;
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(0, admitAll(freshestAdmission(heard, 0), rows), "cap 0 admits nothing");
 }
 
 // --- Full boot ladder persistence ---
@@ -582,7 +610,8 @@ NDBM_TEST_ENTRY void setup()
 
     printf("\n=== Capacity and persistence ===\n");
     RUN_TEST(test_overCapLegacyFile_truncatesToMaxNumNodes);
-    RUN_TEST(test_freshestLastHeardCutoff_keepsTheCapFreshest);
+    RUN_TEST(test_freshestAdmission_keepsTheCapFreshest);
+    RUN_TEST(test_freshestAdmission_boundsTiesAtTheCutoff);
     RUN_TEST(test_fullBootLadder_persistsMigratedV25);
 
     exit(UNITY_END());

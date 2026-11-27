@@ -22,12 +22,16 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-uint32_t freshestLastHeardCutoff(std::vector<uint32_t> &heard, size_t cap)
+FreshestAdmission freshestAdmission(std::vector<uint32_t> &heard, size_t cap)
 {
-    if (cap == 0 || heard.size() <= cap)
-        return 0;
+    if (heard.size() <= cap)
+        return {};
+    if (cap == 0)
+        return {UINT32_MAX, 0};
     std::nth_element(heard.begin(), heard.begin() + (cap - 1), heard.end(), std::greater<uint32_t>());
-    return heard[cap - 1];
+    const uint32_t cutoff = heard[cap - 1];
+    const size_t newer = std::count_if(heard.begin(), heard.end(), [cutoff](uint32_t h) { return h > cutoff; });
+    return {cutoff, cap - newer};
 }
 
 bool meshtastic_NodeDatabase_Legacy_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
@@ -76,21 +80,21 @@ bool NodeDB::migrateLegacyNodeDatabase()
     nodeDatabase.nodes.reserve(maxToMigrate);
     size_t posCount = 0, telCount = 0;
     // Satellites go only to the MAX_SATELLITE_NODES freshest legacy nodes (by last_heard) plus index 0, which is self,
-    // so the upgrade boot holds about the cap (self and ties add a few) rather than one entry per legacy node
+    // so the upgrade boot holds at most the cap plus self rather than one entry per legacy node
     // Node 0 and broadcast can never own a satellite, so they neither rank nor take a slot
     [[maybe_unused]] auto usableKey = [](NodeNum n) { return n != 0 && !isBroadcast(n); };
-    [[maybe_unused]] auto freshestCutoff = [&](auto hasPayload) -> uint32_t {
+    [[maybe_unused]] auto freshestFor = [&](auto hasPayload) {
         std::vector<uint32_t> heard;
         for (size_t i = 1; i < maxToMigrate; ++i)
             if (usableKey(legacyDb.nodes[i].num) && hasPayload(legacyDb.nodes[i]))
                 heard.push_back(legacyDb.nodes[i].last_heard);
-        return freshestLastHeardCutoff(heard, MAX_SATELLITE_NODES);
+        return freshestAdmission(heard, MAX_SATELLITE_NODES);
     };
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-    const uint32_t positionCutoff = freshestCutoff([](const auto &n) { return n.has_position; });
+    FreshestAdmission positionAdmission = freshestFor([](const auto &n) { return n.has_position; });
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    const uint32_t telemetryCutoff = freshestCutoff([](const auto &n) { return n.has_device_metrics; });
+    FreshestAdmission telemetryAdmission = freshestFor([](const auto &n) { return n.has_device_metrics; });
 #endif
     {
         concurrency::LockGuard guard(&satelliteMutex);
@@ -136,11 +140,11 @@ bool NodeDB::migrateLegacyNodeDatabase()
             }
             nodeDatabase.nodes.push_back(slim);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-            if (legacy.has_position && usableKey(legacy.num) && (i == 0 || legacy.last_heard >= positionCutoff))
+            if (legacy.has_position && usableKey(legacy.num) && (i == 0 || positionAdmission.admit(legacy.last_heard)))
                 nodePositions[legacy.num] = legacy.position;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-            if (legacy.has_device_metrics && usableKey(legacy.num) && (i == 0 || legacy.last_heard >= telemetryCutoff))
+            if (legacy.has_device_metrics && usableKey(legacy.num) && (i == 0 || telemetryAdmission.admit(legacy.last_heard)))
                 nodeTelemetry[legacy.num] = legacy.device_metrics;
 #endif
         }
