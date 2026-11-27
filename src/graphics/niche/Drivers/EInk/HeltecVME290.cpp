@@ -2,43 +2,328 @@
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
+#include "graphics/niche/Utils/FlashData.h"
+
+#include <GFX.h>
+#include <cstring>
+
+#include "graphics/niche/Fonts/FreeSans12pt_Win1252.h"
+#include "graphics/niche/Fonts/FreeSans6pt_Win1252.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1252.h"
+
 using namespace NicheGraphics::Drivers;
 
-// OTP LUT (ZJY128296 approach). FAST 0xFF is a no-op on 15-22243-M0282 panels.
+HeltecVME290 *HeltecVME290::activeInstance = nullptr;
+
+namespace
+{
+
+// Custom LUT from DEPG0290BNS800 - used for flex 15-22243-M0282 FAST.
+static const uint8_t LUT_FAST[] = {
+    0x40, 0x00, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // B2B
+    0x00, 0x80, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // B2W
+    0x00, 0x40, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // W2B
+    0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // W2W
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // VCOM
+
+    0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+
+    0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00,
+};
+
+struct WaveformStore {
+    uint8_t mode = static_cast<uint8_t>(HeltecVME290Waveform::Unset);
+};
+
+// Canvas sized for InkHUD default rotation=1 (296 x 128 logical).
+class RotatedCanvas : public GFX
+{
+  public:
+    RotatedCanvas(uint16_t drvW, uint16_t drvH, uint8_t *buf)
+        : GFX(drvH, drvW), driverWidth(drvW), driverHeight(drvH), buffer(buf),
+          rowBytes(static_cast<uint16_t>(((drvW - 1) / 8) + 1))
+    {
+        memset(buffer, 0xFF, rowBytes * driverHeight); // white
+    }
+
+    void drawPixel(int16_t x, int16_t y, uint16_t color) override
+    {
+        if (x < 0 || y < 0 || x >= width() || y >= height())
+            return;
+
+        // InkHUD rotation=1: logical (x,y) -> controller
+        int16_t cx = (driverWidth - 1) - y;
+        int16_t cy = x;
+        if (cx < 0 || cy < 0 || cx >= driverWidth || cy >= driverHeight)
+            return;
+
+        const uint32_t byteNum = (static_cast<uint32_t>(cy) * rowBytes) + (cx / 8);
+        const uint8_t bitNum = 7 - (cx % 8);
+        bitWrite(buffer[byteNum], bitNum, color ? 1 : 0);
+    }
+
+  private:
+    uint16_t driverWidth;
+    uint16_t driverHeight;
+    uint8_t *buffer;
+    uint16_t rowBytes;
+};
+
+static bool buttonDown(uint8_t pin)
+{
+    return digitalRead(pin) == LOW;
+}
+
+static void waitRelease(uint8_t pin)
+{
+    while (buttonDown(pin))
+        yield();
+    delay(30);
+}
+
+} // namespace
+
+void HeltecVME290::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst)
+{
+    SSD16XX::begin(spi, pin_dc, pin_cs, pin_busy, pin_rst);
+    loadMode();
+}
+
+void HeltecVME290::loadMode()
+{
+    WaveformStore stored;
+    if (!FlashData<WaveformStore>::load(&stored, "e290wave"))
+        return;
+
+    if (stored.mode == static_cast<uint8_t>(HeltecVME290Waveform::CustomLut) ||
+        stored.mode == static_cast<uint8_t>(HeltecVME290Waveform::OtpFast)) {
+        mode = static_cast<HeltecVME290Waveform>(stored.mode);
+        LOG_INFO("E290 waveform: %s", heltecVME290WaveformLabel(mode));
+    }
+}
+
+void HeltecVME290::saveMode()
+{
+    WaveformStore stored;
+    stored.mode = static_cast<uint8_t>(mode);
+    FlashData<WaveformStore>::save(&stored, "e290wave");
+}
+
+void HeltecVME290::setWaveform(HeltecVME290Waveform next)
+{
+    mode = next;
+    saveMode();
+    LOG_INFO("E290 waveform set: %s", heltecVME290WaveformLabel(mode));
+}
+
+void HeltecVME290::toggleWaveform()
+{
+    if (mode == HeltecVME290Waveform::CustomLut)
+        setWaveform(HeltecVME290Waveform::OtpFast);
+    else
+        setWaveform(HeltecVME290Waveform::CustomLut);
+}
+
+void HeltecVME290::update(uint8_t *imageData, UpdateTypes type)
+{
+    const uint8_t effective = heltecVME290EffectiveType(mode, static_cast<uint8_t>(type));
+    SSD16XX::update(imageData, static_cast<UpdateTypes>(effective));
+}
+
+void HeltecVME290::updateOtpFast(uint8_t *imageData)
+{
+    // Cleared in finalizeUpdate once the async refresh finishes.
+    forceOtpFast = true;
+    SSD16XX::update(imageData, FAST);
+}
+
+void HeltecVME290::configVoltages()
+{
+    if (updateType != FAST || forceOtpFast || mode != HeltecVME290Waveform::CustomLut)
+        return;
+
+    sendCommand(0x04);
+    sendData(0x41); // VSH1 15V
+    sendData(0x00); // VSH2 NA
+    sendData(0x32); // VSL -15V
+}
+
 void HeltecVME290::configWaveform()
 {
-    sendCommand(0x3C); // Border waveform:
-    sendData(0x05);    // Screen border follows LUT1 (drive white)
+    if (updateType == FAST && !forceOtpFast && mode == HeltecVME290Waveform::CustomLut) {
+        sendCommand(0x3C);
+        sendData(0x60); // hold border
+        sendCommand(0x32);
+        sendData(LUT_FAST, sizeof(LUT_FAST));
+        return;
+    }
 
-    sendCommand(0x18); // Temperature sensor:
-    sendData(0x80);    // Use internal temp sensor for waveform selection
+    // OTP paths (FULL, OtpFast FAST, or forced OTP FAST)
+    sendCommand(0x3C);
+    sendData(0x05); // border follows LUT1
+    sendCommand(0x18);
+    sendData(0x80); // internal temp sensor
 }
 
 void HeltecVME290::configUpdateSequence()
 {
-    switch (updateType) {
-    case FAST:
-        sendCommand(0x22); // Set "update sequence"
-        sendData(0xFF);    // Load LUT from OTP, differential refresh (mode 2)
-        break;
+    HeltecVME290Waveform seqMode = mode;
+    if (forceOtpFast)
+        seqMode = HeltecVME290Waveform::OtpFast;
 
-    case FULL:
-    default:
-        sendCommand(0x22); // Set "update sequence"
-        sendData(0xF7);    // Load LUT from OTP, full refresh
-        break;
-    }
+    const uint8_t seq = heltecVME290UpdateSequence(seqMode, static_cast<uint8_t>(updateType));
+    sendCommand(0x22);
+    sendData(seq);
 }
 
 void HeltecVME290::detachFromUpdate()
 {
-    switch (updateType) {
-    case FAST:
-        return beginPolling(50, 300); // ~300ms for fast refresh
-    case FULL:
-    default:
-        return beginPolling(100, 2000); // ~2s for full refresh
+    if (updateType == FAST) {
+        if (forceOtpFast || mode == HeltecVME290Waveform::OtpFast)
+            return beginPolling(50, 300);
+        return beginPolling(50, 450);
     }
+    return beginPolling(100, 2000);
+}
+
+void HeltecVME290::finalizeUpdate()
+{
+    if (updateType != FULL) {
+        // CustomLut optimization: no writeNewImage needed (same as DEPG0290BNS800).
+        if (!forceOtpFast && mode == HeltecVME290Waveform::CustomLut) {
+            writeOldImage();
+            sendCommand(0x7F);
+            wait();
+        } else {
+            writeNewImage();
+            writeOldImage();
+            sendCommand(0x7F);
+            wait();
+        }
+    }
+
+    if (pin_rst != 0xFF)
+        deepSleep();
+
+    forceOtpFast = false;
+}
+
+void HeltecVME290::paintSelectFrame(uint8_t *buffer, bool updated)
+{
+    // Landscape (InkHUD rotation=1): 296 x 128. Title + button help stay identical on
+    // both frames; only the status line changes so OTP FAST is an obvious optical test.
+    RotatedCanvas canvas(width, height, buffer);
+    canvas.setTextColor(0);
+
+    canvas.setFont(&FreeSans12pt_Win1252);
+    canvas.setCursor(8, 22);
+    canvas.print("Display setup");
+
+    canvas.setFont(&FreeSans9pt_Win1252);
+    canvas.setCursor(8, 48);
+    canvas.print(updated ? "Refresh test: passed" : "Refresh test: ...");
+
+    canvas.setFont(&FreeSans6pt_Win1252);
+    canvas.setCursor(8, 72);
+    canvas.print("Did the Refresh test line change?");
+    canvas.setCursor(8, 92);
+    canvas.print("User button: Yes, it passed");
+    canvas.setCursor(8, 110);
+    canvas.print("Aux button hold: No, it stayed the same");
+}
+
+void HeltecVME290::paintBannerFrame(uint8_t *buffer, const char *label)
+{
+    RotatedCanvas canvas(width, height, buffer);
+    canvas.setTextColor(0);
+
+    canvas.setFont(&FreeSans12pt_Win1252);
+    canvas.setCursor(8, 36);
+    canvas.print("Display ready");
+
+    canvas.setFont(&FreeSans9pt_Win1252);
+    canvas.setCursor(8, 68);
+    canvas.print("Using ");
+    canvas.print(label);
+
+    canvas.setFont(&FreeSans6pt_Win1252);
+    canvas.setCursor(8, 100);
+    canvas.print("Change later: Aux hold, or Options menu");
+}
+
+void HeltecVME290::showModeBanner()
+{
+    const uint16_t rowBytes = static_cast<uint16_t>(((width - 1) / 8) + 1);
+    uint8_t *buffer = new uint8_t[rowBytes * height];
+    paintBannerFrame(buffer, heltecVME290WaveformLabel(mode));
+    SSD16XX::update(buffer, FULL);
+    await();
+    delete[] buffer;
+}
+
+HeltecVME290Waveform HeltecVME290::waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin)
+{
+    pinMode(userButtonPin, INPUT_PULLUP);
+    pinMode(auxButtonPin, INPUT_PULLUP);
+
+    uint32_t auxDownAt = 0;
+    while (true) {
+        if (buttonDown(userButtonPin)) {
+            delay(40);
+            if (buttonDown(userButtonPin)) {
+                waitRelease(userButtonPin);
+                return HeltecVME290Waveform::OtpFast; // status line changed
+            }
+        }
+
+        if (buttonDown(auxButtonPin)) {
+            if (auxDownAt == 0)
+                auxDownAt = millis();
+            else if (millis() - auxDownAt >= 500) {
+                waitRelease(auxButtonPin);
+                return HeltecVME290Waveform::CustomLut; // status line unchanged
+            }
+        } else {
+            auxDownAt = 0;
+        }
+
+        yield();
+    }
+}
+
+void HeltecVME290::runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButtonPin)
+{
+    if (mode != HeltecVME290Waveform::Unset)
+        return;
+
+    LOG_INFO("E290 panel select: starting");
+
+    const uint16_t rowBytes = static_cast<uint16_t>(((width - 1) / 8) + 1);
+    uint8_t *buffer = new uint8_t[rowBytes * height];
+
+    paintSelectFrame(buffer, false);
+    SSD16XX::update(buffer, FULL);
+    await();
+
+    paintSelectFrame(buffer, true);
+    updateOtpFast(buffer);
+    await();
+
+    setWaveform(waitForSelectChoice(userButtonPin, auxButtonPin));
+    showModeBanner();
+
+    delete[] buffer;
 }
 
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

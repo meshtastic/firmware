@@ -33,11 +33,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Shared NicheGraphics components
 // --------------------------------
-#ifdef EINK_HELTEC_VME290_OTP
 #include "graphics/niche/Drivers/EInk/HeltecVME290.h"
-#else
-#include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
-#endif
 #include "graphics/niche/Inputs/TwoButton.h"
 
 // Button feedback
@@ -57,13 +53,9 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-#ifdef EINK_HELTEC_VME290_OTP
-    Drivers::EInk *driver = new Drivers::HeltecVME290; // FPC-7519revb
+    Drivers::HeltecVME290 *driver = new Drivers::HeltecVME290;
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
-#else
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800; // 15-22243-M0282
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
-#endif
+    driver->runPanelSelectIfNeeded(BUTTON_PIN, PIN_BUTTON2);
 
     // InkHUD
     // ----------------------------
@@ -113,10 +105,16 @@ void setupNicheGraphics()
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-    // #1: Aux Button
+    // #1: Aux Button - short: next tile; long: toggle E290 panel waveform
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
+        playChirp();
+    });
+    buttons->setHandlerLongPress(1, [inkhud, driver]() {
+        driver->toggleWaveform();
+        driver->showModeBanner();
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
         playChirp();
     });
 

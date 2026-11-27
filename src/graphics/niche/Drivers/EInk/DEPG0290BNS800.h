@@ -5,8 +5,7 @@ E-Ink display driver
     - Manufacturer: DKE
     - Size: 2.9 inch
     - Resolution: 128px x 296px
-    - Heltec VM-E290 default. On that board, use for flex 15-22243-M0282.
-    - FPC-7519revb on VM-E290 ghosts in FAST; use HeltecVME290 (EINK_HELTEC_VME290_OTP).
+    - Also the CustomLut FAST path for Heltec VM-E290 flex 15-22243-M0282 (see HeltecVME290).
 
 */
 
