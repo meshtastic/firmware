@@ -5,6 +5,7 @@ E-Ink display driver for Heltec Vision Master E290
     - CustomLut: flex 15-22243-M0282 (stock DEPG0290BNS800 LUT)
     - OtpFast: flex FPC-7519revb (OTP mode 2)
     - Unset: FAST promoted to FULL until first-boot panel select
+    - Based on Kuroanji's Heltec_VME290_Hybrid_Driver (https://github.com/kuroanji/Heltec_VME290_Hybrid_Driver)
 
 */
 
@@ -44,7 +45,8 @@ class HeltecVME290 : public SSD16XX
     // Blocking FULL refresh that shows the current mode label (Heltec-default landscape).
     void showModeBanner();
 
-    // Blocking panel select (optical OTP FAST probe). Runs when mode is Unset, or when AUX is held through RESET.
+    // Panel select (optical OTP FAST probe). Runs when mode is Unset, or when AUX is held through RESET.
+    // Waits ~45 s for USR/AUX, then returns without saving so boot continues (FAST promoted to FULL while Unset).
     void runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButtonPin);
 
   protected:
@@ -60,7 +62,8 @@ class HeltecVME290 : public SSD16XX
     // arrowAtAux=false: FULL frame (arrow under USR); true: OTP FAST frame (arrow under AUX).
     void paintSelectFrame(uint8_t *buffer, bool arrowAtAux);
     void paintBannerFrame(uint8_t *buffer, const char *label);
-    HeltecVME290Waveform waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin);
+    // Returns false on timeout; otherwise sets choice.
+    bool waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin, HeltecVME290Waveform &choice);
 
     HeltecVME290Waveform mode = HeltecVME290Waveform::Unset;
     bool forceOtpFast = false; // one-shot for updateOtpFast

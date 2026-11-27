@@ -3,6 +3,7 @@
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 #include "graphics/niche/Utils/FlashData.h"
+#include "mesh/Throttle.h"
 
 #include <GFX.h>
 #include <cstring>
@@ -98,9 +99,15 @@ static bool buttonDown(uint8_t pin)
     return digitalRead(pin) == LOW;
 }
 
+// Stay well under the 90 s ESP32 task watchdog; boot must finish if nobody answers.
+static constexpr uint32_t kSelectTimeoutMs = 45000;
+static constexpr uint32_t kReleaseTimeoutMs = 5000;
+
+// Bounded so a stuck button cannot hang boot.
 static void waitRelease(uint8_t pin)
 {
-    while (buttonDown(pin))
+    const uint32_t startMs = millis();
+    while (buttonDown(pin) && !Throttle::hasElapsed(startMs, kReleaseTimeoutMs))
         yield();
     delay(30);
 }
@@ -283,36 +290,51 @@ void HeltecVME290::showModeBanner()
     delete[] buffer;
 }
 
-HeltecVME290Waveform HeltecVME290::waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin)
+bool HeltecVME290::waitForSelectChoice(uint8_t userButtonPin, uint8_t auxButtonPin, HeltecVME290Waveform &choice)
 {
     pinMode(userButtonPin, INPUT_PULLUP);
     pinMode(auxButtonPin, INPUT_PULLUP);
 
-    while (true) {
-        if (buttonDown(userButtonPin)) {
+    // A button only counts after it has been seen released, so one held or stuck since boot is not an answer.
+    bool userArmed = false;
+    bool auxArmed = false;
+    const uint32_t startMs = millis();
+
+    while (!Throttle::hasElapsed(startMs, kSelectTimeoutMs)) {
+        const bool userDown = buttonDown(userButtonPin);
+        const bool auxDown = buttonDown(auxButtonPin);
+        userArmed = userArmed || !userDown;
+        auxArmed = auxArmed || !auxDown;
+
+        if (userArmed && userDown) {
             delay(40);
             if (buttonDown(userButtonPin)) {
                 waitRelease(userButtonPin);
-                return HeltecVME290Waveform::CustomLut; // parked arrow still under USR
+                choice = HeltecVME290Waveform::CustomLut; // parked arrow still under USR
+                return true;
             }
         }
 
-        if (buttonDown(auxButtonPin)) {
+        if (auxArmed && auxDown) {
             delay(40);
             if (buttonDown(auxButtonPin)) {
                 waitRelease(auxButtonPin);
-                return HeltecVME290Waveform::OtpFast; // parked arrow under AUX
+                choice = HeltecVME290Waveform::OtpFast; // parked arrow under AUX
+                return true;
             }
         }
 
         yield();
     }
+
+    return false;
 }
 
 void HeltecVME290::runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButtonPin)
 {
     pinMode(auxButtonPin, INPUT_PULLUP);
     delay(20);
+    const HeltecVME290Waveform previous = mode;
     // Hold AUX through RESET to re-run the wizard. Do not use Aux long-press while InkHUD runs.
     if (buttonDown(auxButtonPin)) {
         delay(50);
@@ -339,8 +361,15 @@ void HeltecVME290::runPanelSelectIfNeeded(uint8_t userButtonPin, uint8_t auxButt
     updateOtpFast(buffer);
     await();
 
-    setWaveform(waitForSelectChoice(userButtonPin, auxButtonPin));
-    showModeBanner();
+    HeltecVME290Waveform choice = HeltecVME290Waveform::Unset;
+    if (waitForSelectChoice(userButtonPin, auxButtonPin, choice)) {
+        setWaveform(choice);
+        showModeBanner();
+    } else {
+        // Nobody answered: keep the earlier choice (or stay Unset, FAST promoted to FULL) and finish booting.
+        LOG_WARN("E290 panel select: timed out, continuing with %s", heltecVME290WaveformLabel(previous));
+        mode = previous;
+    }
 
     delete[] buffer;
 }
