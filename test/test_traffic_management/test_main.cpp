@@ -652,9 +652,19 @@ static void test_tm_nodeinfo_routerClamp_skipsJustBeyondCeiling(void)
     mockNodeDB->setCachedNode(kTargetNode);
     mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
     TrafficManagementModuleTestShim module;
+    // Serve from NodeDB so the target is answerable; otherwise a cache miss would reject the
+    // request whatever the ceiling, and this test could not see the ceiling move.
+    module.dropNodeInfoCacheForTest();
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
+    request.id = 0x13572468;
     request.hop_start = 3;
     request.hop_limit = 1; // 2 hops away, one past the ceiling of 1
     request.relay_node = 0x00000042;
@@ -665,6 +675,19 @@ static void test_tm_nodeinfo_routerClamp_skipsJustBeyondCeiling(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
     TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Control: the same fixture one hop closer is answered, so the rejection above is the ceiling's doing.
+    request.id = 0x13572469;
+    request.hop_limit = 2; // 1 hop away, at the ceiling
+
+    result = module.handleReceived(request);
+    stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(1, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 /**
