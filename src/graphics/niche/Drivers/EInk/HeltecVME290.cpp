@@ -149,7 +149,7 @@ void HeltecVME290::setWaveform(HeltecVME290Waveform next)
 
 void HeltecVME290::toggleWaveform()
 {
-    if (mode == HeltecVME290Waveform::CustomLut)
+    if (mode != HeltecVME290Waveform::OtpFast)
         setWaveform(HeltecVME290Waveform::OtpFast);
     else
         setWaveform(HeltecVME290Waveform::CustomLut);

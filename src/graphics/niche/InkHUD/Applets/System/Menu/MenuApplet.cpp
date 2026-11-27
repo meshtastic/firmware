@@ -594,6 +594,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_E290_PANEL_WAVEFORM:
 #if defined(HELTEC_VISION_MASTER_E290)
         if (Drivers::HeltecVME290 *panel = Drivers::HeltecVME290::getActive()) {
+            inkhud->awaitUpdate();
             panel->toggleWaveform();
             panel->showModeBanner();
             inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
