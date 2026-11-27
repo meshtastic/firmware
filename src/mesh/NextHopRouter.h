@@ -3,6 +3,7 @@
 #include "FloodingRouter.h"
 #include <map>
 #include <optional>
+#include <vector>
 
 /**
  * An identifier for a globally unique message - a pair of the sending nodenum and the packet id assigned
@@ -42,6 +43,11 @@ struct PendingPacket {
 
     /** Initial remaining retry count, used to detect whether a retry has fired. */
     uint8_t initialNumRetransmissions = 0;
+
+    /** Ciphertext of our first PKI frame for this packet, resent unchanged by every retry; empty for channel traffic. */
+    std::vector<uint8_t> wire;
+    /** The channel byte that frame carried on the air. */
+    uint8_t wireChannel = 0;
 
     PendingPacket() {}
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
@@ -169,6 +175,13 @@ class NextHopRouter : public FloodingRouter
      */
     PendingPacket *findPendingPacket(NodeNum from, PacketId id) { return findPendingPacket(GlobalPacketId(from, id)); }
     PendingPacket *findPendingPacket(GlobalPacketId p);
+
+    /** Router::send() hands us the encoded form of a packet we are retransmitting: for a PKI frame, record
+     *  its ciphertext, which is then the exact payload an overheard relay of ours must carry. */
+    void noteWireForm(const meshtastic_MeshPacket *p) override;
+
+    /** A copy of p's packet to send as the next attempt: for a PKI DM, carrying the frame noteWireForm() recorded. */
+    meshtastic_MeshPacket *allocRetryCopy(const PendingPacket &p);
 
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
