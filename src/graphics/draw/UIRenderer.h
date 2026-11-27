@@ -78,11 +78,9 @@ class UIRenderer
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
     static void rebuildFavoritedNodes();
 
-// OEM screens
-#ifdef USERPREFS_OEM_TEXT
+    // OEM screens (build-time USERPREFS_OEM_* or runtime /prefs/oemboot)
     static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-#endif
 
 #ifdef USE_EINK
     /// Used on eink displays while in deep sleep
