@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Observer.h"
 #include "configuration.h"
 #include <stdint.h>
 
@@ -34,6 +35,8 @@ struct PowerBankDetail {
     uint8_t numTemperatures = 0;
     int8_t temperaturesC[MAX_TEMPERATURES] = {};
     bool overTemperature = false;
+    bool hasBatteryTemperature = false; // from a fuel gauge, which reads the cell itself
+    int16_t batteryTempTenthsC = 0;
 };
 
 // A power-bank controller that reports its own battery and input state.
@@ -50,6 +53,9 @@ class PowerBank
 
     // False while there is nothing to show beyond getStatus().
     virtual bool getDetail(PowerBankDetail &) { return false; }
+
+    // Notified when someone presses the power bank's own button or wakes it by plugging something in.
+    Observable<const PowerBank *> attentionRequested;
 };
 
 #if HAS_POWERBANK

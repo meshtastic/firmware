@@ -11,6 +11,7 @@
 #include "power/HLT331PowerStatus.h"
 #include "power/PowerBank.h"
 #include <Arduino.h>
+#include <atomic>
 #if HAS_CW2217
 #include <Wire.h>
 #include <string.h>
@@ -51,13 +52,20 @@ constexpr uint32_t BOOT_VBUS_HOLD_MS = 15 * 1000;
 constexpr uint32_t VBUS_RELEASE_MS = 3000;
 #endif
 
-#if HLT331_DEBUG
-constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
+// Two IO1 pulses, or a pulse and the wake, from one press count once.
+constexpr uint32_t ATTENTION_HOLDOFF_MS = 1000;
+
+static_assert(ATOMIC_BOOL_LOCK_FREE == 2, "io1Pending is set from an ISR");
+std::atomic<bool> io1Pending{false};
 volatile uint32_t io1Pulses = 0;
 void io1Isr()
 {
+    io1Pending = true;
     io1Pulses = io1Pulses + 1;
 }
+
+#if HLT331_DEBUG
+constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
 #endif
 
 class HLT331PowerBank : public PowerBank, private concurrency::OSThread
@@ -74,8 +82,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
 #ifdef PIN_USB_VBUS_EN
         vbusHoldUntilMs = Time::timerEndsAtMillis(BOOT_VBUS_HOLD_MS);
 #endif
-#if HLT331_DEBUG
         attachInterrupt(digitalPinToInterrupt(PIN_HLT331_IO1), io1Isr, RISING);
+#if HLT331_DEBUG
         lastIo2 = !asleep;
         LOG_DEBUG_HLT331("HLT331: setup, IO1=%d IO2=%d", digitalRead(PIN_HLT331_IO1), lastIo2);
         logGauge();
@@ -91,6 +99,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         if (!haveFrame)
             return false;
         hlt331Detail(parser.status(), isFresh(), asleep, out);
+        out.hasBatteryTemperature = gaugeValid;
+        out.batteryTempTenthsC = gauge.tempTenthsC;
         return true;
     }
 
@@ -123,10 +133,17 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
                 lastFrameMs = Time::getMillis();
             }
         }
+        const bool wasAsleep = asleep;
         asleep = digitalRead(PIN_HLT331_IO2) == LOW;
 #ifdef PIN_USB_VBUS_EN
         updateBoardVbus();
 #endif
+        const bool woke = wasAsleep && !asleep;
+        const bool pulsed = io1Pending.exchange(false); // a pulse between a read and a clear would be lost
+        if ((woke || pulsed) && (lastAttentionMs == 0 || Throttle::hasElapsed(lastAttentionMs, ATTENTION_HOLDOFF_MS))) {
+            lastAttentionMs = Time::stampMillis();
+            attentionRequested.notifyObservers(this);
+        }
 
         const uint32_t rejected = parser.badCrcFrames() + parser.badLengthFrames();
         if (rejected != lastRejected && (lastWarnMs == 0 || Throttle::hasElapsed(lastWarnMs, WARN_INTERVAL_MS))) {
@@ -330,6 +347,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
     uint32_t lastGaugeMs = 0;
     PowerBankStatus lastReported;
     bool lastAvailable = false;
+    uint32_t lastAttentionMs = 0;
 };
 } // namespace
 
