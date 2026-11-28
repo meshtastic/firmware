@@ -45,13 +45,19 @@ constexpr uint32_t STALE_MS = 3000;
 constexpr uint32_t WARN_INTERVAL_MS = 60 * 1000;
 constexpr uint32_t GAUGE_INTERVAL_MS = 3000;
 
-#if HLT331_DEBUG
-constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
+// Two IO1 pulses, or a pulse and the wake, from one press count once.
+constexpr uint32_t ATTENTION_HOLDOFF_MS = 1000;
+
+volatile bool io1Pending = false;
 volatile uint32_t io1Pulses = 0;
 void io1Isr()
 {
+    io1Pending = true;
     io1Pulses = io1Pulses + 1;
 }
+
+#if HLT331_DEBUG
+constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
 #endif
 
 class HLT331PowerBank : public PowerBank, private concurrency::OSThread
@@ -65,8 +71,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         // Read now so Power's first reading at boot already has the battery.
         readGauge();
         asleep = digitalRead(PIN_HLT331_IO2) == LOW;
-#if HLT331_DEBUG
         attachInterrupt(digitalPinToInterrupt(PIN_HLT331_IO1), io1Isr, RISING);
+#if HLT331_DEBUG
         lastIo2 = !asleep;
         LOG_DEBUG_HLT331("HLT331: setup, IO1=%d IO2=%d", digitalRead(PIN_HLT331_IO1), lastIo2);
         logGauge();
@@ -82,6 +88,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         if (!haveFrame)
             return false;
         hlt331Detail(parser.status(), isFresh(), out);
+        out.hasBatteryTemperature = gaugeValid;
+        out.batteryTempTenthsC = gauge.tempTenthsC;
         return true;
     }
 
@@ -114,7 +122,15 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
                 lastFrameMs = Time::getMillis();
             }
         }
+        const bool wasAsleep = asleep;
         asleep = digitalRead(PIN_HLT331_IO2) == LOW;
+        const bool woke = wasAsleep && !asleep;
+        const bool pulsed = io1Pending;
+        io1Pending = false;
+        if ((woke || pulsed) && (lastAttentionMs == 0 || Throttle::hasElapsed(lastAttentionMs, ATTENTION_HOLDOFF_MS))) {
+            lastAttentionMs = Time::stampMillis();
+            attentionRequested.notifyObservers(this);
+        }
 
         const uint32_t rejected = parser.badCrcFrames() + parser.badLengthFrames();
         if (rejected != lastRejected && (lastWarnMs == 0 || Throttle::hasElapsed(lastWarnMs, WARN_INTERVAL_MS))) {
@@ -288,6 +304,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
     uint32_t lastGaugeMs = 0;
     PowerBankStatus lastReported;
     bool lastAvailable = false;
+    uint32_t lastAttentionMs = 0;
 };
 } // namespace
 

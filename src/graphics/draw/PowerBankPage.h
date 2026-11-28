@@ -20,6 +20,10 @@ uint8_t formatLines(bool haveStatus, const PowerBankStatus &status, bool haveDet
 
 #if HAS_SCREEN && HAS_POWERBANK
 void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#if USE_POWER_BANK_GRAPHIC_PAGE
+// Full-screen colour layout for a 220x128 TFT; boards that set USE_POWER_BANK_GRAPHIC_PAGE show it instead.
+void drawGraphicFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#endif
 #endif
 } // namespace PowerBankPage
 } // namespace graphics

@@ -54,6 +54,8 @@ extern "C" {
 #define TFT_HEIGHT 220
 #define SPI_FREQUENCY 4000000
 #define SCREEN_ROTATE
+#define USE_POWER_BANK_GRAPHIC_PAGE 1 // laid out for this 220x128 panel
+#define MAX_TFT_COLOR_REGIONS 96      // the power bank page alone draws about 60 regions
 
 // Pins
 

@@ -140,6 +140,7 @@ class Screen
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "modules/AdminModule.h"
+#include "power/PowerBank.h"
 #include <string>
 #include <vector>
 
@@ -235,6 +236,10 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
     CallbackObserver<Screen, AdminModule_ObserverData *> adminMessageObserver =
         CallbackObserver<Screen, AdminModule_ObserverData *>(this, &Screen::handleAdminMessage);
+#if HAS_POWERBANK
+    CallbackObserver<Screen, const PowerBank *> powerBankObserver =
+        CallbackObserver<Screen, const PowerBank *>(this, &Screen::handlePowerBankAttention);
+#endif
 
   public:
     OLEDDisplay *getDisplayDevice() { return dispdev; }
@@ -709,6 +714,9 @@ class Screen : public concurrency::OSThread
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
+#if HAS_POWERBANK
+    int handlePowerBankAttention(const PowerBank *bank);
+#endif
     int handleAdminMessage(AdminModule_ObserverData *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
@@ -821,6 +829,7 @@ class Screen : public concurrency::OSThread
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
+            uint8_t powerBank = 255;
         } positions;
 
         uint8_t frameCount = 0;
