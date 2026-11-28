@@ -11,6 +11,7 @@
 #include "power/HLT331PowerStatus.h"
 #include "power/PowerBank.h"
 #include <Arduino.h>
+#include <atomic>
 #if HAS_CW2217
 #include <Wire.h>
 #include <string.h>
@@ -54,7 +55,8 @@ constexpr uint32_t VBUS_RELEASE_MS = 3000;
 // Two IO1 pulses, or a pulse and the wake, from one press count once.
 constexpr uint32_t ATTENTION_HOLDOFF_MS = 1000;
 
-volatile bool io1Pending = false;
+static_assert(ATOMIC_BOOL_LOCK_FREE == 2, "io1Pending is set from an ISR");
+std::atomic<bool> io1Pending{false};
 volatile uint32_t io1Pulses = 0;
 void io1Isr()
 {
@@ -137,8 +139,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         updateBoardVbus();
 #endif
         const bool woke = wasAsleep && !asleep;
-        const bool pulsed = io1Pending;
-        io1Pending = false;
+        const bool pulsed = io1Pending.exchange(false); // a pulse between a read and a clear would be lost
         if ((woke || pulsed) && (lastAttentionMs == 0 || Throttle::hasElapsed(lastAttentionMs, ATTENTION_HOLDOFF_MS))) {
             lastAttentionMs = Time::stampMillis();
             attentionRequested.notifyObservers(this);

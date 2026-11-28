@@ -2520,8 +2520,7 @@ int Screen::handlePowerBankAttention(const PowerBank *)
     if (!ui || !showingNormalScreen || isInteractionBusy() || NotificationRenderer::isOverlayBannerShowing() ||
         menuHandler::menuQueue != menuHandler::MenuNone || framesetInfo.positions.powerBank == 255)
         return 0;
-    if (!screenOn)
-        powerFSM.trigger(EVENT_INPUT);
+    powerFSM.trigger(EVENT_INPUT); // turns the screen on, or restarts its timeout so the page stays up
     ui->switchToFrame(framesetInfo.positions.powerBank);
 #ifdef USERPREFS_UI_TEST_LOG
     logFrameChange("powerbank", framesetInfo.positions.powerBank);
