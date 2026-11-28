@@ -79,8 +79,7 @@ bool JapanTxHook::performCarrierSense(RadioInterface *iface)
             hasValidSample = true;
             rssi -= RSSI_FEM_LNA_OFFSET;
             if (rssi >= CARRIER_SENSE_THRESHOLD_DBM) {
-                LOG_DEBUG_RADIO("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi,
-                                CARRIER_SENSE_THRESHOLD_DBM);
+                LOG_INFO("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
                 return false;
             }
         }
@@ -102,7 +101,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
     if (pauseArmed) {
         const uint32_t pauseUntil = lastTxEndTime + getTxPauseDurationMs();
         if (!Throttle::deadlinePassedAt(now, pauseUntil)) {
-            LOG_DEBUG_RADIO("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id, pauseUntil - now);
+            LOG_INFO("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id, pauseUntil - now);
             return PRETX_DEFER;
         }
         pauseArmed = false;
@@ -110,7 +109,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
 
     if (backoffArmed) {
         if (!Throttle::deadlinePassedAt(now, backoffUntilMs)) {
-            LOG_DEBUG_RADIO("JP LBT: deferring packet 0x%08x during LBT backoff (remaining %ums)", p->id, backoffUntilMs - now);
+            LOG_INFO("JP LBT: deferring packet 0x%08x during LBT backoff (remaining %ums)", p->id, backoffUntilMs - now);
             return PRETX_DEFER;
         }
         backoffArmed = false;
@@ -123,7 +122,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
         backoffUntilMs = Time::getMillis() + backoffMs;
         backoffArmed = true;
         backoffPacket = p;
-        LOG_DEBUG_RADIO("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
+        LOG_INFO("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
         return PRETX_DEFER;
     }
 
