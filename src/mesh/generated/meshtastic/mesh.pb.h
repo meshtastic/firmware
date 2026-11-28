@@ -571,7 +571,7 @@ typedef enum _meshtastic_StoreForwardPlusPlus_SFPP_message_type {
     /* Request the objects named by a set of short IDs, usually the ones an
  ADVERT exchange decoded as missing. */
     meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST = 8,
-    /* Provide one object, in the same encoding the chain messages use. */
+    /* Provide one object in the item protocol's own encoding. */
     meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_PROVIDE = 9,
     /* Ask for a bucket's full short-ID list. Escalation after a checksum
  mismatch, or after a sketch that would not decode. */
@@ -1180,10 +1180,8 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     meshtastic_StoreForwardPlusPlus_SFPP_message_type sfpp_message_type;
     /* The hash of the specific message */
     meshtastic_StoreForwardPlusPlus_message_hash_t message_hash;
-    /* the root hash of a chain
- On ADVERT through GONE this is the reconciliation scope, which is the same
- thing named differently: the chain root already identifies the channel a
- bucket covers, and a partial hash resolves through the same mappings. */
+    /* The reconciliation scope: the channel's root hash, or a prefix of it, so a
+ partial hash resolves through the same mappings. */
     meshtastic_StoreForwardPlusPlus_root_hash_t root_hash;
     /* The encrypted bytes from a message
  On an ADVERT this instead carries the sketch: odd power sums over
@@ -1204,8 +1202,8 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
  byte of the object hash, or the reserved whole-window value. */
     uint32_t bucket;
     /* Which derivation produced the set-reconciliation fields: the hash, the
- short-ID width, the checksum domain string, the bucket size and the
- counter origin. All of them must match before a decoded difference means
+ short-ID width, the checksum domain string and the content-bucket
+ derivation. All of them must match before a decoded difference means
  anything, so one number covers the lot and any change to any of them is a
  bump. Required on ADVERT through GONE; zero is invalid rather than
  defaulting to 1. A receiver that does not implement the stated version
