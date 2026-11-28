@@ -3,6 +3,8 @@
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "concurrency/LockGuard.h"
+#include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
@@ -129,14 +131,45 @@ static BLEDfuSecure bledfusecure; // DFU software update helper service
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
-
 static uint16_t connectionHandle;
 static bool passkeyShowing;
 
+// Just ack that the caller is allowed to read
+static void authorizeRead(uint16_t conn_hdl)
+{
+    ble_gatts_rw_authorize_reply_params_t reply = {.type = BLE_GATTS_AUTHORIZE_TYPE_READ};
+    reply.params.read.gatt_status = BLE_GATT_STATUS_SUCCESS;
+    sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+}
+
+#define BLE_TORADIO_QUEUE_SIZE 3
+#define BLE_TORADIO_FULL_WAIT_MS 2000
+
+// GATT callbacks run in Bluefruit's BLE task and only queue work here; every PhoneAPI call runs on the main loop,
+// like every other PhoneAPI transport, so modules and the screen are never driven from the BLE task.
 class BluetoothPhoneAPI : public PhoneAPI
 {
+    concurrency::Lock queueLock;
+
+    uint8_t toRadioQueue[BLE_TORADIO_QUEUE_SIZE][meshtastic_ToRadio_size];
+    uint16_t toRadioQueueLen[BLE_TORADIO_QUEUE_SIZE] = {};
+    uint32_t toRadioQueueSession[BLE_TORADIO_QUEUE_SIZE] = {};
+    uint8_t toRadioQueueHead = 0;
+    uint8_t toRadioQueueCount = 0;
+
+    // linkSession is bumped on every disconnect; apiSession is the link the PhoneAPI state currently belongs to
+    uint32_t linkSession = 0;
+    uint32_t apiSession = 0;
+
+    // Last ToRadio value received from the phone
+    uint8_t lastToRadio[meshtastic_ToRadio_size];
+    uint16_t lastToRadioLen = 0;
+
+    // A fromRadio read waiting for the main loop to fill fromRadioBytes and authorize it
+    bool readPending = false;
+    uint16_t readConnHandle = BLE_CONN_HANDLE_INVALID;
+    uint32_t readSeq = 0;
+
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
@@ -151,8 +184,162 @@ class BluetoothPhoneAPI : public PhoneAPI
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
 
+    void answerPendingRead()
+    {
+        uint32_t seq;
+        {
+            concurrency::LockGuard g(&queueLock);
+            if (!readPending)
+                return;
+            seq = readSeq;
+        }
+
+        size_t numBytes = getFromRadio(fromRadioBytes);
+
+        uint16_t conn;
+        {
+            concurrency::LockGuard g(&queueLock);
+            if (!readPending || readSeq != seq)
+                return; // The link dropped while we were building the reply
+            readPending = false;
+            conn = readConnHandle;
+        }
+        // The SoftDevice serves the read (and any blob reads after it) from fromRadioBytes once we authorize
+        fromRadio.write(fromRadioBytes, numBytes);
+        authorizeRead(conn);
+    }
+
+    // Caller holds queueLock
+    bool workPending() const { return toRadioQueueCount || readPending || apiSession != linkSession; }
+
+    void wake() { concurrency::mainDelay.interrupt(); }
+
   public:
     BluetoothPhoneAPI() { api_type = TYPE_BLE; }
+
+    /// Called from the main loop; returns true if more work arrived while it ran
+    bool service()
+    {
+        {
+            concurrency::LockGuard g(&queueLock);
+            if (!workPending())
+                return false;
+        }
+
+        // Handle writes before the pending read, so the read that follows a want_config sees its reply
+        while (true) {
+            const uint8_t *packet = nullptr;
+            uint16_t len = 0;
+            {
+                concurrency::LockGuard g(&queueLock);
+                if (toRadioQueueCount && toRadioQueueSession[toRadioQueueHead] == apiSession) {
+                    packet = toRadioQueue[toRadioQueueHead];
+                    len = toRadioQueueLen[toRadioQueueHead];
+                } else if (apiSession != linkSession) {
+                    apiSession = toRadioQueueCount ? toRadioQueueSession[toRadioQueueHead] : linkSession;
+                } else {
+                    break;
+                }
+            }
+
+            if (!packet) {
+                // The link this PhoneAPI state belonged to is gone; its already-acked writes were handled above
+                close();
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+                // close() leaves auth alone if config never started, and a new link must not inherit it
+                setAdminAuthorized(false);
+#endif
+                continue;
+            }
+
+            // The head slot is never written by the BLE task until it is released below
+            LOG_DEBUG("BLE ToRadio packet, %u bytes", len);
+            handleToRadio(packet, len);
+
+            concurrency::LockGuard g(&queueLock);
+            toRadioQueueHead = (toRadioQueueHead + 1) % BLE_TORADIO_QUEUE_SIZE;
+            toRadioQueueCount--;
+        }
+
+        answerPendingRead();
+
+        concurrency::LockGuard g(&queueLock);
+        return workPending();
+    }
+
+    /// Called from the BLE task for each toRadio write
+    void queueToRadio(const uint8_t *data, uint16_t len)
+    {
+        uint32_t session;
+        {
+            concurrency::LockGuard g(&queueLock);
+            session = linkSession;
+        }
+
+        for (uint32_t waited = 0;; waited += 10) {
+            bool stale = false, duplicate = false, queued = false;
+            {
+                concurrency::LockGuard g(&queueLock);
+                if (linkSession != session) {
+                    stale = true;
+                } else if (len == lastToRadioLen && memcmp(lastToRadio, data, len) == 0) {
+                    duplicate = true;
+                } else if (toRadioQueueCount < BLE_TORADIO_QUEUE_SIZE) {
+                    memcpy(lastToRadio, data, len);
+                    lastToRadioLen = len;
+                    uint8_t tail = (toRadioQueueHead + toRadioQueueCount) % BLE_TORADIO_QUEUE_SIZE;
+                    memcpy(toRadioQueue[tail], data, len);
+                    toRadioQueueLen[tail] = len;
+                    toRadioQueueSession[tail] = session;
+                    toRadioQueueCount++;
+                    queued = true;
+                }
+            }
+
+            if (stale)
+                return;
+            if (duplicate) {
+                LOG_DEBUG("Drop dup ToRadio packet we just saw");
+                return;
+            }
+            if (queued) {
+                wake();
+                return;
+            }
+            if (waited >= BLE_TORADIO_FULL_WAIT_MS) {
+                LOG_WARN("Drop ToRadio packet, BLE queue full (%u bytes)", len);
+                return;
+            }
+            // Back-pressure the phone the way handling the write inline used to; vTaskDelay, as delay() can flush USB
+            wake();
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+
+    /// Called from the BLE task when a fromRadio read starts; the main loop fills the value and authorizes it
+    void parkRead(uint16_t conn_hdl)
+    {
+        {
+            concurrency::LockGuard g(&queueLock);
+            readPending = true;
+            readConnHandle = conn_hdl;
+            readSeq++;
+        }
+        wake();
+    }
+
+    /// Called on disconnect; the main loop closes the PhoneAPI after handling the writes this link already sent
+    void onLinkDropped()
+    {
+        {
+            concurrency::LockGuard g(&queueLock);
+            linkSession++;
+            readPending = false;
+            // So the first packet of the next connection is not taken for a duplicate
+            lastToRadioLen = 0;
+        }
+        wake();
+    }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -189,11 +376,8 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
     if (bluetoothPhoneAPI) {
-        bluetoothPhoneAPI->close();
+        bluetoothPhoneAPI->onLinkDropped();
     }
-
-    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
-    memset(lastToRadio, 0, sizeof(lastToRadio));
 
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
@@ -253,45 +437,35 @@ void startAdv(void)
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
-// Just ack that the caller is allowed to read
-static void authorizeRead(uint16_t conn_hdl)
-{
-    ble_gatts_rw_authorize_reply_params_t reply = {.type = BLE_GATTS_AUTHORIZE_TYPE_READ};
-    reply.params.write.gatt_status = BLE_GATT_STATUS_SUCCESS;
-    sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
-}
 /**
- * client is starting read, pull the bytes from our API class
+ * client is starting read; the main loop pulls the bytes from our API class and authorizes the read
  */
 void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
-    if (request->offset == 0) {
-        // If the read is long, we will get multiple authorize invocations - we only populate data on the first
-        size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
-        // Someone is going to read our value as soon as this callback returns.  So fill it with the next message in the queue
-        // or make empty if the queue is empty
-        fromRadio.write(fromRadioBytes, numBytes);
-    } else {
-        // LOG_INFO("Ignore successor read");
+    // A long read gets one authorize per blob; only the first fetches data, the rest re-read the same buffer
+    if (request->offset != 0 || !bluetoothPhoneAPI) {
+        authorizeRead(conn_hdl);
+        return;
     }
-    authorizeRead(conn_hdl);
+    bluetoothPhoneAPI->parkRead(conn_hdl);
 }
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
-    LOG_INFO("toRadioWriteCb data %p, len %u", data, len);
-    if (memcmp(lastToRadio, data, len) != 0) {
-        LOG_DEBUG("New ToRadio packet");
-        memcpy(lastToRadio, data, len);
-        bluetoothPhoneAPI->handleToRadio(data, len);
-    } else {
-        LOG_DEBUG("Drop dup ToRadio packet we just saw");
+    if (!bluetoothPhoneAPI)
+        return;
+    if (len == 0 || len > meshtastic_ToRadio_size) {
+        LOG_WARN("Drop ToRadio packet, bad length %u", len);
+        return;
     }
+    bluetoothPhoneAPI->queueToRadio(data, len);
 }
 
 void setupMeshService(void)
 {
-    bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    if (!bluetoothPhoneAPI) {
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    }
     meshBleService.begin();
     // Note: You must call .begin() on the BLEService before calling .begin() on
     // any characteristic(s) within that service definition.. Calling .begin() on
@@ -313,9 +487,8 @@ void setupMeshService(void)
     fromRadio.setProperties(CHR_PROPS_READ);
     fromRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
-    fromRadio.setReadAuthorizeCallback(
-        onFromRadioAuthorize,
-        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    // Runs in the BLE task; it only hands the read to the main loop
+    fromRadio.setReadAuthorizeCallback(onFromRadioAuthorize, false);
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
@@ -325,7 +498,7 @@ void setupMeshService(void)
     toRadio.setFixedLen(0);
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
-    // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    // Runs in the BLE task; it only queues the write for the main loop
     toRadio.setWriteCallback(onToRadioWrite, false);
     toRadio.begin();
 
@@ -373,6 +546,11 @@ bool NRF52Bluetooth::isConnected()
 int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
+}
+void NRF52Bluetooth::loop()
+{
+    if (bluetoothPhoneAPI && bluetoothPhoneAPI->service())
+        runASAP = true;
 }
 
 // Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".

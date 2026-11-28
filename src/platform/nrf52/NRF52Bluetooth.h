@@ -14,6 +14,8 @@ class NRF52Bluetooth : BluetoothApi
     bool isConnected();
     int getRssi();
     void sendLog(const uint8_t *logMessage, size_t length);
+    // Runs the PhoneAPI work queued by the BLE callbacks; called from nrf52Loop()
+    void loop();
 
   private:
     static void onConnectionSecured(uint16_t conn_handle);
