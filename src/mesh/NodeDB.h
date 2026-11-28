@@ -729,6 +729,8 @@ class NodeDB
     uint32_t lastRefusedIdentityNoticeMs = 0;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
+    bool configClampedOnLoad = false;
+    bool channelsClampedOnLoad = false;
     /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.

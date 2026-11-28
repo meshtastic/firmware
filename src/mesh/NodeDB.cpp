@@ -819,9 +819,9 @@ NodeDB::NodeDB()
         saveWhat |= SEGMENT_NODEDATABASE;
     // Don't persist on a degraded boot: it would overwrite the unreadable-but-maybe-transient config file
     // with no-key UNSET defaults. Runtime reconfiguration (admin set) still persists normally.
-    if (!configDecodeFailed && configCRC != crc32Buffer(&config, sizeof(config)))
+    if (!configDecodeFailed && (configClampedOnLoad || configCRC != crc32Buffer(&config, sizeof(config))))
         saveWhat |= SEGMENT_CONFIG;
-    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+    if ((!configDecodeFailed && channelsClampedOnLoad) || channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
     if (config.position.gps_enabled) {
@@ -2686,6 +2686,8 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    configClampedOnLoad = false;
+    channelsClampedOnLoad = false;
     configDecodeFailed = false;
     configLoadComplete = false;
 
@@ -3099,7 +3101,12 @@ void NodeDB::loadFromDisk()
         }
     }
 
+    // Track mutations from clampLoadedLoraConfig() here because NodeDB::NodeDB() snapshots CRCs after loadFromDisk().
+    const uint32_t preClampConfigCRC = crc32Buffer(&config, sizeof(config));
+    const uint32_t preClampChannelsCRC = crc32Buffer(&channelFile, sizeof(channelFile));
     clampLoadedLoraConfig();
+    configClampedOnLoad = (preClampConfigCRC != crc32Buffer(&config, sizeof(config)));
+    channelsClampedOnLoad = (preClampChannelsCRC != crc32Buffer(&channelFile, sizeof(channelFile)));
 
     state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),
                       &meshtastic_DeviceUIConfig_msg, &uiconfig);
@@ -3296,6 +3303,14 @@ bool NodeDB::reloadFromDisk()
         saveNodeDatabaseToDisk();
         migrationSavePending = false;
     }
+
+    int clampedSegments = 0;
+    if (!configDecodeFailed && configClampedOnLoad)
+        clampedSegments |= SEGMENT_CONFIG;
+    if (!configDecodeFailed && channelsClampedOnLoad)
+        clampedSegments |= SEGMENT_CHANNELS;
+    if (clampedSegments)
+        saveToDisk(clampedSegments);
 
     // Push the now-real config to the radio.
     if (rIface) {
