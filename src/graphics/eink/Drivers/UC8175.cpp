@@ -82,6 +82,13 @@ void UC8175::wait(uint32_t timeoutMs)
     }
 }
 
+// The panel may not show the cached frame, whether the update failed mid-sequence or timed out later: an identical next
+// frame must not be skipped, nor used as the FAST refresh's old image
+void UC8175::onUpdateFailed()
+{
+    hasPreviousBuffer = false;
+}
+
 void UC8175::reset()
 {
     if (pin_rst != (uint8_t)-1) {

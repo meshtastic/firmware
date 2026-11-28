@@ -45,6 +45,14 @@ void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 // This is what allows us to update the display asynchronously
 int32_t EInk::runOnce()
 {
+    // Done first: a poll delayed past the timeout (setup() holds the main loop for seconds) must not fail an update that
+    // already finished
+    if (!failed && isUpdateDone()) {
+        finalizeUpdate();      // Any post-update code: power down panel hardware, hibernate, etc
+        updateRunning = false; // Change what we report via EInk::busy()
+        return disable();      // Stop polling
+    }
+
     // Check for polling timeout
     // Manually set at 10 seconds, in case some big task holds up the firmware's cooperative multitasking
     if (millis() - pollingBegunAt > 10000)
@@ -55,19 +63,13 @@ int32_t EInk::runOnce()
     // - other error (derived classes)
     if (failed) {
         LOG_WARN("Display update failed. Check wiring & power supply");
+        onUpdateFailed();
         updateRunning = false;
         failed = false;
         return disable();
     }
 
-    // If update not yet done
-    if (!isUpdateDone())
-        return pollingInterval; // Poll again in a few ms
-
-    // If update done
-    finalizeUpdate();      // Any post-update code: power down panel hardware, hibernate, etc
-    updateRunning = false; // Change what we report via EInk::busy()
-    return disable();      // Stop polling
+    return pollingInterval; // Not done yet: poll again in a few ms
 }
 
 // Wait for an in progress update to complete before continuing

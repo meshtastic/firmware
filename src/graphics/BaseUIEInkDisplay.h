@@ -15,6 +15,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 
 #include "configuration.h"
 
+#include "concurrency/OSThread.h"
 #include "graphics/eink/Drivers/EInk.h"
 
 #include <OLEDDisplay.h>
@@ -22,7 +23,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 namespace NicheGraphics
 {
 
-class BaseUIEInkDisplay : public OLEDDisplay
+class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
 {
   public:
     // Flags Screen.cpp sets via EINK_ADD_FRAMEFLAG before triggering a draw.
@@ -52,8 +53,8 @@ class BaseUIEInkDisplay : public OLEDDisplay
     void enableUnlimitedFastMode() { addFrameFlag(UNLIMITED_FAST); }
     void disableUnlimitedFastMode() { frameFlags = (frameFlagTypes)(frameFlags & ~UNLIMITED_FAST); }
 
-    // Tuning, called once per panel profile
-    void setDisplayResilience(uint8_t fastPerFull, float stressMultiplier = 2.0f);
+    // Tuning, called once per panel profile: how many FAST refreshes before a BACKGROUND frame is drawn FULL
+    void setDisplayResilience(uint8_t fastPerFull);
 
     // Exposed so Screen.cpp / variants can read the rotation passed in at construction
     uint8_t getRotation() const { return rotation; }
@@ -62,12 +63,17 @@ class BaseUIEInkDisplay : public OLEDDisplay
     // Perform an update now, unconditionally. Returns true if a frame was pushed to the driver.
     bool commit(Drivers::EInk::UpdateTypes type, bool blocking);
 
-    // Convert OLEDDisplay's column-major buffer into the panel's row-major MSB-left buffer.
-    // Applies rotation. Returns the hash of the panel buffer for frame-skip comparison.
-    uint32_t repack();
+    // Convert OLEDDisplay's column-major buffer into the panel's row-major MSB-left buffer, applying rotation.
+    // Only while the driver is idle: it reads panelBuffer again when an update finishes.
+    void repack();
+    uint8_t panelRotation() const; // rotation, plus 180° for flip_screen
+    uint32_t frameHash() const;    // of the OLEDDisplay buffer and panelRotation(), for frame-skip comparison
 
-    // Decide FULL vs FAST based on current frame flags + accumulated debt.
+    // Decide FULL vs FAST from the frame flags and the FAST refreshes since the last FULL.
     Drivers::EInk::UpdateTypes decide();
+
+    // Pushes the frame held back while the panel was busy, once it is free
+    int32_t runOnce() override;
 
     Drivers::EInk *driver = nullptr;
     uint8_t rotation = 0; // 0=0°, 1=90°CW, 2=180°, 3=270°CW
@@ -76,13 +82,15 @@ class BaseUIEInkDisplay : public OLEDDisplay
     uint16_t panelRowBytes = 0;
 
     frameFlagTypes frameFlags = BACKGROUND;
+    bool framePending = false; // A frame arrived mid-refresh; runOnce() draws the buffer as it is then
+    Drivers::EInk::UpdateTypes pendingType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // FULL if any held frame was
     uint32_t lastDrawMsec = 0;
+    static constexpr uint32_t FLUSH_POLL_MS = 20;
     uint32_t lastHash = 0;
 
-    // DisplayHealth-style debt tracking
-    float fullRefreshDebt = 0.0f;
+    // FAST refreshes since the last FULL
+    uint16_t fastSinceFull = 0;
     uint8_t fastPerFull = 7;
-    float stressMultiplier = 2.0f;
 };
 
 } // namespace NicheGraphics

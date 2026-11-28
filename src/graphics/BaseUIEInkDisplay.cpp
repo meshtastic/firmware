@@ -8,8 +8,11 @@
 
 using namespace NicheGraphics;
 
-BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation) : driver(driver), rotation(rotation & 0x3)
+BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation)
+    : concurrency::OSThread("BaseUIEInk"), driver(driver), rotation(rotation & 0x3)
 {
+    OSThread::disable();
+
     this->geometry = GEOMETRY_RAWMODE;
 
     // BaseUI draws in UI orientation. Physical panel dimensions are swapped for 90°/270°.
@@ -43,16 +46,21 @@ void BaseUIEInkDisplay::addFrameFlag(frameFlagTypes flag)
     frameFlags = (frameFlagTypes)(frameFlags | flag);
 }
 
-void BaseUIEInkDisplay::setDisplayResilience(uint8_t fastPerFull, float stressMultiplier)
+void BaseUIEInkDisplay::setDisplayResilience(uint8_t fastPerFull)
 {
     this->fastPerFull = (fastPerFull == 0) ? 1 : fastPerFull;
-    this->stressMultiplier = stressMultiplier;
 }
 
 void BaseUIEInkDisplay::joinAsyncRefresh()
 {
     if (driver->busy())
         driver->await();
+    if (framePending) {
+        framePending = false;
+        OSThread::disable();
+        if (commit(pendingType, true))
+            lastDrawMsec = Time::stampMillis();
+    }
 }
 
 // OLEDDisplayUi tick path. Honours rate-limit unless flags demand otherwise.
@@ -78,13 +86,43 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
     if (lastDrawMsec != 0 && (now - lastDrawMsec) < msecLimit)
         return false;
 
-    const bool blocking = frameFlags & BLOCKING;
-    Drivers::EInk::UpdateTypes type = decide();
+    // An unchanged frame is skipped before decide(), which counts every frame: an idle screen ticking once a second would
+    // otherwise run a FULL every fastPerFull seconds. COSMETIC still redraws; a held FULL still runs.
+    const uint32_t hash = frameHash();
+    const bool heldFull = framePending && pendingType == Drivers::EInk::UpdateTypes::FULL;
+    if (hash == lastHash && lastDrawMsec != 0 && !(frameFlags & COSMETIC) && !heldFull) {
+        // The panel shows, or is drawing, this frame already: any held frame is stale
+        framePending = false;
+        OSThread::disable();
+        frameFlags = BACKGROUND;
+        return false;
+    }
 
-    // Don't pile frames on top of a running update - wait it out.
+    Drivers::EInk::UpdateTypes type = decide();
+    // A held FULL frame already reset the FAST count; whatever replaces it must still be FULL
+    if (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL)
+        type = Drivers::EInk::UpdateTypes::FULL;
+    // Decide on the type the panel will actually run: commit() turns FAST into FULL where FAST is unsupported
+    if (type == Drivers::EInk::UpdateTypes::FAST && !driver->supports(Drivers::EInk::UpdateTypes::FAST))
+        type = Drivers::EInk::UpdateTypes::FULL;
+    // BLOCKING only holds for a FULL refresh (the deep-sleep screen), as it did in EInkDynamicDisplay
+    const bool blocking = (frameFlags & BLOCKING) && type == Drivers::EInk::UpdateTypes::FULL;
+
+    // Mid-refresh, keep only the newest frame rather than waiting: runOnce() draws it when the panel is free
+    if (driver->busy() && !blocking) {
+        pendingType = type;
+        framePending = true;
+        OSThread::setIntervalFromNow(FLUSH_POLL_MS);
+        OSThread::enabled = true;
+        frameFlags = BACKGROUND;
+        return false;
+    }
     if (driver->busy())
         driver->await();
 
+    // This frame supersedes any queued one, and nothing is queued behind it
+    framePending = false;
+    OSThread::disable();
     const bool pushed = commit(type, blocking);
     if (pushed)
         lastDrawMsec = now;
@@ -96,12 +134,13 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
 
 bool BaseUIEInkDisplay::commit(Drivers::EInk::UpdateTypes type, bool blocking)
 {
-    uint32_t hash = repack();
+    const uint32_t hash = frameHash();
 
     // Skip if frame unchanged. Exception: caller explicitly wants a refresh (COSMETIC or FULL).
     if (hash == lastHash && type != Drivers::EInk::UpdateTypes::FULL && lastDrawMsec != 0)
         return false;
     lastHash = hash;
+    repack();
 
     // Fall back to FULL on panels that don't advertise FAST support.
     if (type == Drivers::EInk::UpdateTypes::FAST && !driver->supports(Drivers::EInk::UpdateTypes::FAST))
@@ -114,48 +153,76 @@ bool BaseUIEInkDisplay::commit(Drivers::EInk::UpdateTypes type, bool blocking)
     return true;
 }
 
+int32_t BaseUIEInkDisplay::runOnce()
+{
+    if (!framePending)
+        return disable();
+    if (driver->busy())
+        return FLUSH_POLL_MS;
+
+    framePending = false;
+    if (commit(pendingType, false))
+        lastDrawMsec = Time::stampMillis();
+    return disable();
+}
+
 Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
 {
     typedef Drivers::EInk::UpdateTypes UT;
 
-    const bool unlimitedFast = frameFlags & UNLIMITED_FAST;
-
     // Explicit flag wins outright
     if (frameFlags & COSMETIC) {
-        fullRefreshDebt = max(fullRefreshDebt - 1.0f, 0.0f);
+        fastSinceFull = 0;
         return UT::FULL;
     }
-    if (frameFlags & DEMAND_FAST) {
-        if (!unlimitedFast) {
-            fullRefreshDebt += (fullRefreshDebt < 1.0f) ? (1.0f / fastPerFull) : (stressMultiplier * (1.0f / fastPerFull));
-        }
+
+    // A requested FAST is never refused. UNLIMITED_FAST frames don't count towards the next FULL.
+    if (frameFlags & (DEMAND_FAST | RESPONSIVE | UNLIMITED_FAST)) {
+        if (!(frameFlags & UNLIMITED_FAST) && fastSinceFull < UINT16_MAX)
+            fastSinceFull++;
         return UT::FAST;
     }
 
-    const bool explicitFast = frameFlags & RESPONSIVE;
-
-    if (explicitFast || unlimitedFast) {
-        if (!unlimitedFast) {
-            fullRefreshDebt += (fullRefreshDebt < 1.0f) ? (1.0f / fastPerFull) : (stressMultiplier * (1.0f / fastPerFull));
-        }
-        return UT::FAST;
-    }
-
-    // BACKGROUND / unspecified: let debt decide
-    if (fullRefreshDebt >= 1.0f) {
-        fullRefreshDebt = max(fullRefreshDebt - 1.0f, 0.0f);
+    // BACKGROUND: FULL once enough FAST refreshes have built up. One FULL redraws the whole image, so however far past
+    // the limit the count went, it starts again from zero rather than spending FULLs on the next few frames.
+    if (fastSinceFull >= fastPerFull) {
+        fastSinceFull = 0;
         return UT::FULL;
     }
-    fullRefreshDebt += 1.0f / fastPerFull;
+    fastSinceFull++;
     return UT::FAST;
 }
 
-uint32_t BaseUIEInkDisplay::repack()
+uint8_t BaseUIEInkDisplay::panelRotation() const
 {
-    memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
+    // flipScreenVertically() is a no-op here (sendCommand() discards commands), so honour flip_screen as a further 180°
+    return (rotation + (config.display.flip_screen ? 2 : 0)) & 0x3;
+}
 
+void BaseUIEInkDisplay::repack()
+{
     const uint16_t pw = driver->width;
     const uint16_t ph = driver->height;
+    const uint8_t rot = panelRotation();
+
+    // Unrotated, byte-aligned: convert 8x8 blocks, one OLED page of 8 columns into 8 panel row bytes
+    if (rot == 0 && displayWidth == pw && displayHeight == ph && pw % 8 == 0 && ph % 8 == 0) {
+        for (uint16_t page = 0; page < ph / 8; page++) {
+            const uint8_t *col = &buffer[page * displayWidth];
+            uint8_t *row = &panelBuffer[page * 8 * panelRowBytes];
+            for (uint16_t xb = 0; xb < pw / 8; xb++, col += 8) {
+                for (uint8_t bit = 0; bit < 8; bit++) {
+                    uint8_t out = 0;
+                    for (uint8_t i = 0; i < 8; i++)
+                        out |= ((col[i] >> bit) & 1) << (7 - i);
+                    row[bit * panelRowBytes + xb] = ~out; // OLED 1 = black, panel 1 = white
+                }
+            }
+        }
+        return;
+    }
+
+    memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
 
     // OLEDDisplay buffer: byte = buffer[x + (y/8) * displayWidth]; bit = 1 << (y & 7); 1 = black
     // Niche buffer:       byte = (y * panelRowBytes) + (x/8);      bit = 1 << (7 - x%8); 1 = white
@@ -165,7 +232,7 @@ uint32_t BaseUIEInkDisplay::repack()
             const bool isBlack = b & (1 << (oy & 7));
 
             uint16_t px, py;
-            switch (rotation) {
+            switch (rot) {
             case 1: // 90° CW: OLED (ox,oy) → panel (pw-1-oy, ox)
                 px = pw - 1 - oy;
                 py = ox;
@@ -196,13 +263,18 @@ uint32_t BaseUIEInkDisplay::repack()
                 panelBuffer[byteNum] |= (1 << bitNum);
         }
     }
+}
 
+uint32_t BaseUIEInkDisplay::frameHash() const
+{
     // FNV-1a
     uint32_t h = 2166136261u;
-    for (uint32_t i = 0; i < panelBufferSize; i++) {
-        h ^= panelBuffer[i];
+    for (uint32_t i = 0; i < displayBufferSize; i++) {
+        h ^= buffer[i];
         h *= 16777619u;
     }
+    h ^= panelRotation(); // A flip_screen change redraws an otherwise identical frame
+    h *= 16777619u;
     return h;
 }
 
