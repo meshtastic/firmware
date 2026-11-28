@@ -35,6 +35,16 @@ constexpr uint8_t kMaxFrames = 4;
 constexpr size_t kMessageHashBytes = 16;
 constexpr size_t kFrameKeyBytes = 8;
 
+// Item frames name their schema on the wire; an old or unknown one is discarded.
+constexpr uint8_t kFrameVersion = 3;
+
+// The carried age is a 14-bit minifloat: four-bit exponent, ten-bit mantissa, in whole seconds.
+constexpr uint16_t kMaxAge14 = 0x3FFFu;
+constexpr uint32_t kMaxAgeS = 0x3FFu << 15;
+
+uint16_t encodeAge14(uint32_t ageS);
+uint32_t decodeAge14(uint16_t code);
+
 // The wire carries broadcast as 0; the message hash and the replay use the real value.
 constexpr uint32_t kBroadcastNodeNum = 0xFFFFFFFFu;
 

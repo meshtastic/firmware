@@ -1230,9 +1230,6 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
  means "stop asking", so an unsigned one denies service against a bucket
  that still exists. */
     meshtastic_StoreForwardPlusPlus_sr_signature_t sr_signature;
-    /* Seconds since the archive first heard the message. Relative, so a
- clockless client can still place it. */
-    uint32_t heard_ago_s;
     /* Frame position for a message that did not fit one frame: low byte is the
  index, next byte is the total; 0 means not framed. Kept separate from
  sr_frame so the sketch-side reverse guard still holds. */
@@ -1242,6 +1239,10 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     bool origin_verified;
     /* Ties replies to a client request. */
     uint32_t request_id;
+    /* Seconds since the archive first heard the message, as a 14-bit minifloat:
+ four-bit exponent and ten-bit mantissa, so the code is monotonic and 2 B
+ as a varint. Zero means unknown. */
+    uint32_t age;
 } meshtastic_StoreForwardPlusPlus;
 
 typedef PB_BYTES_ARRAY_T(200) meshtastic_RemoteShell_payload_t;
@@ -2411,10 +2412,10 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_sr_checksum_tag 14
 #define meshtastic_StoreForwardPlusPlus_sr_short_ids_tag 15
 #define meshtastic_StoreForwardPlusPlus_sr_signature_tag 16
-#define meshtastic_StoreForwardPlusPlus_heard_ago_s_tag 17
 #define meshtastic_StoreForwardPlusPlus_frame_tag 18
 #define meshtastic_StoreForwardPlusPlus_origin_verified_tag 19
 #define meshtastic_StoreForwardPlusPlus_request_id_tag 20
+#define meshtastic_StoreForwardPlusPlus_age_tag  21
 #define meshtastic_RemoteShell_op_tag            1
 #define meshtastic_RemoteShell_session_id_tag    2
 #define meshtastic_RemoteShell_seq_tag           3
@@ -2725,10 +2726,10 @@ X(a, STATIC,   SINGULAR, UINT32,   sr_frame,         13) \
 X(a, STATIC,   SINGULAR, FIXED64,  sr_checksum,      14) \
 X(a, STATIC,   REPEATED, FIXED32,  sr_short_ids,     15) \
 X(a, STATIC,   SINGULAR, BYTES,    sr_signature,     16) \
-X(a, STATIC,   SINGULAR, UINT32,   heard_ago_s,      17) \
 X(a, STATIC,   SINGULAR, UINT32,   frame,            18) \
 X(a, STATIC,   SINGULAR, BOOL,     origin_verified,  19) \
-X(a, STATIC,   SINGULAR, UINT32,   request_id,       20)
+X(a, STATIC,   SINGULAR, UINT32,   request_id,       20) \
+X(a, STATIC,   SINGULAR, UINT32,   age,              21)
 #define meshtastic_StoreForwardPlusPlus_CALLBACK NULL
 #define meshtastic_StoreForwardPlusPlus_DEFAULT NULL
 

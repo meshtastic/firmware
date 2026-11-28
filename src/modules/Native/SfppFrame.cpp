@@ -22,7 +22,29 @@ size_t encodedSize(const meshtastic_StoreForwardPlusPlus &msg)
     return size;
 }
 
+} // namespace
+
+uint16_t encodeAge14(uint32_t ageS)
+{
+    if (ageS > kMaxAgeS)
+        ageS = kMaxAgeS;
+    uint8_t exponent = 0;
+    while ((ageS >> exponent) > 0x3FFu && exponent < 15)
+        exponent++;
+    return (uint16_t)(((uint16_t)exponent << 10) | ((ageS >> exponent) & 0x3FFu));
+}
+
+uint32_t decodeAge14(uint16_t code)
+{
+    const uint8_t exponent = (uint8_t)((code >> 10) & 0xFu);
+    return (uint32_t)(code & 0x3FFu) << exponent;
+}
+
+namespace
+{
+
 // packed frame field: low byte index, next byte total; 0 means the message fits in one frame.
+
 uint32_t packFrame(uint8_t index, uint8_t total)
 {
     return (uint32_t)index | (uint32_t)total << 8;
@@ -48,13 +70,14 @@ bool buildFrame(const uint8_t *hash, const uint8_t *slice, size_t len, uint32_t 
         return false;
 
     msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME;
+    msg.sr_version = kFrameVersion;
     msg.message_hash.size = kFrameKeyBytes;
     memcpy(msg.message_hash.bytes, hash, kFrameKeyBytes);
     if (withMeta) {
         msg.encapsulated_to = to == kBroadcastNodeNum ? 0 : to;
         msg.encapsulated_from = from;
         msg.encapsulated_id = id;
-        msg.heard_ago_s = heardAgoS;
+        msg.age = encodeAge14(heardAgoS);
         msg.origin_verified = originVerified;
     }
     msg.frame = frameField;
@@ -70,7 +93,7 @@ bool buildFrame(const uint8_t *hash, const uint8_t *slice, size_t len, uint32_t 
 size_t maxSliceFor(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, uint32_t id, uint32_t frameField,
                    bool withMeta, size_t fieldLimit, size_t bodyLimit)
 {
-    const uint32_t worstHeardAgo = withMeta ? 0xFFFFFFFFu : 0;
+    const uint32_t worstHeardAgo = withMeta ? kMaxAgeS : 0;
     const bool worstVerified = withMeta;
 
     size_t maxSlice = 0;
@@ -125,7 +148,7 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
     // envelope is sized at its worst case here too, so the decision is the same for every archive.
     if (len <= fieldLimit) {
         meshtastic_StoreForwardPlusPlus worst;
-        if (!buildFrame(hash, ciphertext, len, to, from, id, 0xFFFFFFFFu, true, 0, true, worst))
+        if (!buildFrame(hash, ciphertext, len, to, from, id, kMaxAgeS, true, 0, true, worst))
             return false;
         if (encodedSize(worst) <= bodyLimit) {
             meshtastic_StoreForwardPlusPlus single;
@@ -242,6 +265,8 @@ bool Reassembler::offer(const meshtastic_StoreForwardPlusPlus &frame, uint32_t n
 
     if (frame.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
         return false;
+    if (frame.sr_version != kFrameVersion || frame.age > kMaxAge14)
+        return false;
     if (frame.message_hash.size < kFrameKeyBytes)
         return false;
     if (frame.message.size == 0 || frame.message.size > sizeof(frame.message.bytes))
@@ -273,7 +298,7 @@ bool Reassembler::offer(const meshtastic_StoreForwardPlusPlus &frame, uint32_t n
         slot->to = frame.encapsulated_to == 0 ? kBroadcastNodeNum : frame.encapsulated_to;
         slot->from = frame.encapsulated_from;
         slot->id = frame.encapsulated_id;
-        slot->heardAgoS = frame.heard_ago_s;
+        slot->heardAgoS = decodeAge14((uint16_t)frame.age);
         slot->originVerified = frame.origin_verified;
         slot->haveMeta = true;
     }

@@ -44,6 +44,56 @@ size_t bodySize(const meshtastic_StoreForwardPlusPlus &frame)
     return size;
 }
 
+// Walks the encoded top-level fields and reports whether `field` appears on the wire.
+bool wireHasField(const meshtastic_StoreForwardPlusPlus &frame, uint32_t field)
+{
+    uint8_t buf[512];
+    pb_ostream_t stream = pb_ostream_from_buffer(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(pb_encode(&stream, &meshtastic_StoreForwardPlusPlus_msg, &frame));
+
+    size_t i = 0;
+    while (i < stream.bytes_written) {
+        uint64_t key = 0;
+        unsigned shift = 0;
+        while (i < stream.bytes_written && (buf[i] & 0x80)) {
+            key |= (uint64_t)(buf[i] & 0x7F) << shift;
+            shift += 7;
+            i++;
+        }
+        if (i >= stream.bytes_written)
+            return false;
+        key |= (uint64_t)buf[i++] << shift;
+        const uint32_t number = (uint32_t)(key >> 3);
+        const uint32_t wireType = (uint32_t)(key & 7);
+        if (number == field)
+            return true;
+
+        if (wireType == 0) {
+            while (i < stream.bytes_written && (buf[i++] & 0x80)) {
+            }
+        } else if (wireType == 1) {
+            i += 8;
+        } else if (wireType == 2) {
+            uint64_t len = 0;
+            shift = 0;
+            while (i < stream.bytes_written && (buf[i] & 0x80)) {
+                len |= (uint64_t)(buf[i] & 0x7F) << shift;
+                shift += 7;
+                i++;
+            }
+            if (i >= stream.bytes_written)
+                return false;
+            len |= (uint64_t)buf[i++] << shift;
+            i += (size_t)len;
+        } else if (wireType == 5) {
+            i += 4;
+        } else {
+            return false;
+        }
+    }
+    return false;
+}
+
 std::vector<meshtastic_StoreForwardPlusPlus> split(const std::vector<uint8_t> &data, uint32_t to = sfppframe::kBroadcastNodeNum,
                                                    uint32_t heardAgoS = 7, bool originVerified = true)
 {
@@ -89,6 +139,45 @@ void test_messageHashMatchesTheWireLayout()
     uint8_t out[sfppframe::kMessageHashBytes];
     sfppframe::messageHash(data, sizeof(data), 0xAABBCCDD, 0x11223344, 0x55667788, out);
     TEST_ASSERT_EQUAL_MEMORY(expected, out, sizeof(expected));
+}
+
+// --- Age minifloat ---
+
+// Exact whole seconds to 17 minutes, and a code that only grows with the age it names.
+void test_age_minifloat_is_monotonic_and_exact_to_seventeen_minutes()
+{
+    for (uint32_t age = 0; age <= 1023; age++)
+        TEST_ASSERT_EQUAL_UINT32(age, sfppframe::decodeAge14(sfppframe::encodeAge14(age)));
+
+    uint16_t previousCode = 0;
+    uint32_t previousAge = 0;
+    for (uint32_t age = 0; age <= 400u * 24u * 60u * 60u; age += 997) {
+        const uint16_t code = sfppframe::encodeAge14(age);
+        const uint32_t decoded = sfppframe::decodeAge14(code);
+        TEST_ASSERT_GREATER_OR_EQUAL_UINT16(previousCode, code);
+        TEST_ASSERT_GREATER_OR_EQUAL_UINT32(previousAge, decoded);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(age, decoded);
+        previousCode = code;
+        previousAge = decoded;
+    }
+}
+
+// The quantisation is under three minutes at 48 hours.
+void test_age_minifloat_is_within_three_minutes_at_48_hours()
+{
+    const uint32_t age = 48u * 60u * 60u;
+    const uint32_t decoded = sfppframe::decodeAge14(sfppframe::encodeAge14(age));
+    const uint32_t error = decoded > age ? decoded - age : age - decoded;
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(3u * 60u, error);
+}
+
+// The largest code covers 388 days, and a larger age saturates rather than wrapping.
+void test_age_minifloat_covers_388_days()
+{
+    const uint32_t maxAge = sfppframe::decodeAge14(0x3FFF);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(387u * 24u * 60u * 60u, maxAge);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(388u * 24u * 60u * 60u, maxAge);
+    TEST_ASSERT_EQUAL_UINT16(0x3FFF, sfppframe::encodeAge14(388u * 24u * 60u * 60u));
 }
 
 // --- Splitter / reassembler round trips ---
@@ -284,6 +373,44 @@ void test_lruIsWrapSafeNearUint32Max()
     TEST_ASSERT_TRUE(reassembler.hasSlot(keyOf(c[0])));
 }
 
+// --- Age on the wire ---
+
+// The item frame carries the age in field 21 and reassembly decodes it back to seconds.
+void test_item_frame_reads_age_from_field_21()
+{
+    const auto frames = split(cipher(40), sfppframe::kBroadcastNodeNum, 12345);
+    TEST_ASSERT_EQUAL_UINT32(sfppframe::encodeAge14(12345), frames[0].age);
+
+    Reassembler reassembler;
+    Replay replay;
+    TEST_ASSERT_TRUE(reassembler.offer(frames[0], 0, replay));
+    TEST_ASSERT_EQUAL_UINT32(sfppframe::decodeAge14((uint16_t)frames[0].age), replay.heardAgoS);
+}
+
+// The old seconds field 17 is gone from the wire, not merely left unset.
+void test_item_frame_does_not_populate_heard_ago_s()
+{
+    const auto frames = split(cipher(40), sfppframe::kBroadcastNodeNum, 12345);
+    TEST_ASSERT_TRUE(wireHasField(frames[0], meshtastic_StoreForwardPlusPlus_age_tag));
+    TEST_ASSERT_FALSE(wireHasField(frames[0], 17));
+}
+
+// Item frames name their schema version; a frame from an older or unknown one is discarded.
+void test_frame_version_three_is_required()
+{
+    const auto frames = split(cipher(40));
+    TEST_ASSERT_EQUAL_UINT32(sfppframe::kFrameVersion, frames[0].sr_version);
+
+    Reassembler reassembler;
+    Replay replay;
+    meshtastic_StoreForwardPlusPlus old = frames[0];
+    old.sr_version = 2;
+    TEST_ASSERT_FALSE(reassembler.offer(old, 0, replay));
+    old.sr_version = 0;
+    TEST_ASSERT_FALSE(reassembler.offer(old, 0, replay));
+    TEST_ASSERT_TRUE(reassembler.offer(frames[0], 0, replay));
+}
+
 // --- Size bound ---
 void test_everyFrameBodyStaysWithin168Bytes()
 {
@@ -307,7 +434,7 @@ void test_oversizedMessageIsRefused()
 
 // The default config is the old 168-byte split, so each length produces the same frame fields,
 // body sizes and slice sizes as the fixed-bound splitter did.
-void test_defaultFramesStayByteForByteUnchanged()
+void test_default_frames_change_only_by_the_age_encoding()
 {
     struct Golden {
         size_t len;
@@ -317,9 +444,9 @@ void test_defaultFramesStayByteForByteUnchanged()
         size_t size[4];
     };
     const Golden goldens[] = {
-        {40, 1, {0}, {72}, {40}},
-        {220, 2, {0x0200, 0x0201}, {163, 111}, {127, 93}},
-        {500, 4, {0x0400, 0x0401, 0x0402, 0x0403}, {163, 168, 168, 93}, {127, 149, 149, 75}},
+        {40, 1, {0}, {74}, {40}},
+        {220, 2, {0x0200, 0x0201}, {167, 112}, {128, 92}},
+        {500, 4, {0x0400, 0x0401, 0x0402, 0x0403}, {167, 168, 168, 98}, {128, 147, 147, 78}},
     };
     for (const Golden &g : goldens) {
         const auto frames = split(cipher(g.len, (uint8_t)g.len));
@@ -359,6 +486,10 @@ void setup()
 
     RUN_TEST(test_messageHashMatchesTheWireLayout);
 
+    RUN_TEST(test_age_minifloat_is_monotonic_and_exact_to_seventeen_minutes);
+    RUN_TEST(test_age_minifloat_is_within_three_minutes_at_48_hours);
+    RUN_TEST(test_age_minifloat_covers_388_days);
+
     RUN_TEST(test_singleFrameRoundTrips);
     RUN_TEST(test_twoFrameRoundTrips);
     RUN_TEST(test_fourFrameRoundTrips);
@@ -366,6 +497,9 @@ void setup()
     RUN_TEST(test_duplicateFrameIsIgnored);
     RUN_TEST(test_secondArchiveCompletesTheSet);
     RUN_TEST(test_directRecipientRoundTrips);
+    RUN_TEST(test_item_frame_reads_age_from_field_21);
+    RUN_TEST(test_item_frame_does_not_populate_heard_ago_s);
+    RUN_TEST(test_frame_version_three_is_required);
 
     RUN_TEST(test_corruptSliceIsDiscarded);
     RUN_TEST(test_emptyFrameIsRefused);
@@ -376,7 +510,7 @@ void setup()
     RUN_TEST(test_everyFrameBodyStaysWithin168Bytes);
     RUN_TEST(test_oversizedMessageIsRefused);
 
-    RUN_TEST(test_defaultFramesStayByteForByteUnchanged);
+    RUN_TEST(test_default_frames_change_only_by_the_age_encoding);
     RUN_TEST(test_itemBodyMaxSplitsAndReassembles);
 
     exit(UNITY_END());
