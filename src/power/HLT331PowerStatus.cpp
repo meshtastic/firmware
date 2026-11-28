@@ -9,10 +9,14 @@ bool hlt331MergeStatus(const HLT331Sources &in, PowerBankStatus &out)
             useGauge = false;
     }
 
+    const bool controllerUsable = in.haveFrame && (in.fresh || in.asleep);
     if (useGauge) {
         out.batteryMv = in.gaugeMv;
         out.batteryPercent = in.gaugePercent;
-    } else if (in.haveFrame && (in.fresh || in.asleep)) {
+        // At the end of a charge the gauge stops at about 99.4 % while the HLT331 already says full.
+        if (out.batteryPercent == 99 && controllerUsable && in.controller.batteryPercent == 100)
+            out.batteryPercent = 100;
+    } else if (controllerUsable) {
         out.batteryMv = in.controller.batteryMv;
         out.batteryPercent = in.controller.batteryPercent;
     } else {
@@ -21,6 +25,11 @@ bool hlt331MergeStatus(const HLT331Sources &in, PowerBankStatus &out)
     out.charging = in.fresh && in.controller.charging;
     out.inputPresent = in.fresh && in.controller.inputPresent();
     return true;
+}
+
+bool hlt331WantsC2Vbus(bool fresh, const HLT331Status &s)
+{
+    return fresh && s.c2State == HLT331Status::PORT_CHARGING;
 }
 
 static PowerBankDetail::PortState portState(uint8_t state)

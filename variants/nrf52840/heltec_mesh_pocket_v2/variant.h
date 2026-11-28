@@ -92,7 +92,8 @@ extern "C" {
 #define PIN_HLT331_IO1 (0 + 4)  // event pulse, active HIGH; wakes the board from System OFF
 #define PIN_HLT331_IO2 (32 + 9) // "system working", active HIGH; not used yet
 
-// IO_CSA switches VBUSC2 from the power bank board through to the nRF52840 VBUS pin; without it USB does not enumerate.
+// IO_CSA drives Q3/Q2, which connect C2's VBUS (VBUSC22) to VDD_5V, the nRF52840's USB VBUS. Connected, USB
+// enumerates but the bank cannot power a device on C2; HLT331PowerBank connects it only while C2 feeds the bank.
 #define PIN_USB_VBUS_EN (0 + 20)
 #define PIN_USB_VBUS_EN_ACTIVE HIGH
 
