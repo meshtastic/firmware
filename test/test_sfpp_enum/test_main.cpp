@@ -3721,6 +3721,66 @@ void test_whole_window_listing_splits_past_eight_frames()
     TEST_ASSERT_EQUAL_UINT(40, requested);
 }
 
+// A whole-window pull of 60 missing objects needs two item-request frames; the request must not
+// be dropped once it is larger than one frame.
+void test_whole_window_pull_past_forty_ids_converges()
+{
+    ingestAuthority(60);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(execSql(dirB, "delete from channel_messages;"));
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> provides;
+    for (uint32_t i = 0; i < 60 && provides.size() < 2; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE)
+                provides.push_back(out);
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, provides.size());
+
+    uint32_t listed = 0;
+    for (const auto &provide : provides) {
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, provide));
+        listed += decodeSfpp(provide).sr_short_ids_count;
+    }
+    TEST_ASSERT_EQUAL_UINT(60, listed);
+
+    std::vector<meshtastic_MeshPacket> itemRequests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(2, itemRequests.size());
+    uint32_t requested = 0;
+    for (const auto &request : itemRequests) {
+        TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(request).sfpp_message_type);
+        requested += decodeSfpp(request).sr_short_ids_count;
+        TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, request));
+    }
+    TEST_ASSERT_EQUAL_UINT(60, requested);
+
+    // The serving pacer releases 30 frames per rolling 10 minutes, so the remainder needs a
+    // second window; keep draining across both until every object has arrived.
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 1000 && frames < 60; guard++) {
+        Time::setTestMillis(Time::getMillis() + 2000);
+        myNodeInfo.my_node_num = AUTHORITY_NODE;
+        testRouter->sent.clear();
+        authority->runOnce();
+        for (const auto &out : takeSent()) {
+            if (decodeSfpp(out).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue;
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, out));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(60, frames);
+    assertConverged();
+}
+
 // The mixed-build bridge: a new archive still hears the old sr_version=1 per-bucket advert and
 // pulls that bucket from it.
 void test_old_bucket_advert_is_still_accepted()
@@ -3827,6 +3887,7 @@ void setup()
     RUN_TEST(test_count_gap_skips_the_sketch_decode);
     RUN_TEST(test_whole_window_listing_converges);
     RUN_TEST(test_whole_window_listing_splits_past_eight_frames);
+    RUN_TEST(test_whole_window_pull_past_forty_ids_converges);
     RUN_TEST(test_old_bucket_advert_is_still_accepted);
     UNITY_END();
 }

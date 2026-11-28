@@ -1185,7 +1185,7 @@ void StoreForwardPlusPlusModule::forgetItemInFlight(pinsketch::Element id)
 void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer,
                                                      const std::vector<pinsketch::Element> &ids)
 {
-    if (ids.empty() || ids.size() > sfppsr::kMaxShortIds)
+    if (ids.empty())
         return;
 
     const bool wholeWindow = bucket == sfppsr::kWholeSetBucket;
@@ -1308,9 +1308,14 @@ void StoreForwardPlusPlusModule::resendItemRequest()
         return;
     sfppsr::Scope scope;
     copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);
-    meshtastic_StoreForwardPlusPlus msg;
-    if (sfppsr::buildItemRequest(scope, enumWanted, msg))
-        sendEnumMessage(msg, enumExchangePeer, "item_req");
+    const size_t perFrame = sfppsr::maxShortIdsPerFrame();
+    for (size_t begin = 0; begin < enumWanted.size(); begin += perFrame) {
+        const size_t end = std::min(begin + perFrame, enumWanted.size());
+        std::vector<pinsketch::Element> slice(enumWanted.begin() + begin, enumWanted.begin() + end);
+        meshtastic_StoreForwardPlusPlus msg;
+        if (sfppsr::buildItemRequest(scope, slice, msg))
+            sendEnumMessage(msg, enumExchangePeer, "item_req");
+    }
     enumRequestSentMs = Time::getMillis();
 }
 
