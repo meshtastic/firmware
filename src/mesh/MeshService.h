@@ -194,10 +194,25 @@ class MeshService
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);
 
-    /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
-    /// sends our nodeinfo
-    /// returns true if we sent a position
-    bool trySendPosition(NodeNum dest, bool wantReplies = false);
+    /// What a user-initiated ping put on the air.
+    enum class PingResult { Position, NodeInfo, NotSent };
+
+    /// Two-line banner text reporting a PingResult.
+    static const char *pingResultBanner(PingResult r)
+    {
+        switch (r) {
+        case PingResult::Position:
+            return "Position\nSent";
+        case PingResult::NodeInfo:
+            return "Node Info\nSent";
+        default:
+            return "Node Info\nNot Sent";
+        }
+    }
+
+    /// User-initiated ping: sends our latest location to the mesh (if we have it), otherwise our nodeinfo.
+    /// NodeInfo is held off only by the 60s interactive floor, not the 30 min periodic one.
+    PingResult trySendPosition(NodeNum dest, bool wantReplies = false);
 
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb

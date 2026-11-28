@@ -464,7 +464,7 @@ ErrorCode MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool c
     return res;
 }
 
-bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
+MeshService::PingResult MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
@@ -479,15 +479,15 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
         (getPositionPrecisionForChannel(sendChan) != 0 || findPositionChannel(sendChan))) {
         LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
         if (positionModule->sendOurPosition(dest, wantReplies, sendChan))
-            return true;
+            return PingResult::Position;
     }
 #endif
-    // No position went out, so a false return tells the callers the nodeinfo fallback was used.
     if (nodeInfoModule) {
         LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
+        if (nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel, true))
+            return PingResult::NodeInfo;
     }
-    return false;
+    return PingResult::NotSent;
 }
 
 // ASCII BEL, the in-band alert marker. Numeric so no control byte sits in the source, and

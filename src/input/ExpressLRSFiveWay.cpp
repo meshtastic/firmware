@@ -214,16 +214,22 @@ void ExpressLRSFiveWay::toggleGPS()
 void ExpressLRSFiveWay::sendAdhocPing()
 {
     service->refreshLocalMeshNode();
-    bool sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+    const MeshService::PingResult sent = service->trySendPosition(NODENUM_BROADCAST, true);
 
     // Show custom alert frame, with multi-line centering
-    screen->startAlert([sentPosition](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+    screen->startAlert([sent](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         uint16_t x_offset = display->width() / 2;
         uint16_t y_offset = 26; // Same constant as the default startAlert frame
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, y_offset + y, "Sent ad-hoc");
-        display->drawString(x_offset + x, y_offset + FONT_HEIGHT_MEDIUM + y, sentPosition ? "position" : "nodeinfo");
+        if (sent == MeshService::PingResult::NotSent) {
+            display->drawString(x_offset + x, y_offset + y, "Ad-hoc ping");
+            display->drawString(x_offset + x, y_offset + FONT_HEIGHT_MEDIUM + y, "not sent");
+        } else {
+            display->drawString(x_offset + x, y_offset + y, "Sent ad-hoc");
+            display->drawString(x_offset + x, y_offset + FONT_HEIGHT_MEDIUM + y,
+                                sent == MeshService::PingResult::Position ? "position" : "nodeinfo");
+        }
     });
 
     alerting = true;
