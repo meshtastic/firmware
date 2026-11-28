@@ -158,16 +158,12 @@ void test_anUnimplementedVersionIsDiscarded()
 
 // --- The overloading guard, both directions ---
 
-void test_aSetReconciliationMessageMayNotCarryChainFields()
+void test_aSetReconciliationMessageMayNotCarryAnObjectHash()
 {
     meshtastic_StoreForwardPlusPlus msg;
     TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
 
     Advert heard;
-    msg.commit_hash.size = 16;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
-
-    msg.commit_hash.size = 0;
     msg.message_hash.size = 16;
     TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
 }
@@ -191,7 +187,7 @@ void test_anItemProvideMayCarryTheChainsOwnFields()
 void test_aChainMessageCarryingSetFieldsIsRecognisable()
 {
     meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
-    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_SFPP_MESSAGE_TYPE_UNSPECIFIED;
     msg.bucket = 12;
     TEST_ASSERT_FALSE(sfppsr::hasSetReconciliationFields(msg));
     TEST_ASSERT_FALSE(sfppsr::isSetReconciliationType(msg.sfpp_message_type));
@@ -455,7 +451,7 @@ void setup()
     RUN_TEST(test_anUnimplementedVersionIsDiscarded);
 
     // Overloading guard
-    RUN_TEST(test_aSetReconciliationMessageMayNotCarryChainFields);
+    RUN_TEST(test_aSetReconciliationMessageMayNotCarryAnObjectHash);
     RUN_TEST(test_anItemProvideMayCarryTheChainsOwnFields);
     RUN_TEST(test_aChainMessageCarryingSetFieldsIsRecognisable);
     RUN_TEST(test_theWrongTypeIsNeverParsedAsAnother);

@@ -107,12 +107,12 @@ bool readFrame(const meshtastic_StoreForwardPlusPlus &in, uint8_t &index, uint8_
     return total != 0 && index < total;
 }
 
-// The item protocol's own hash fields have no meaning on a set-reconciliation message, and one
-// carrying both is either malformed or an attempt to have a single packet read differently by two
+// The item protocol's own hash field has no meaning on a set-reconciliation message, and one
+// carrying it is either malformed or an attempt to have a single packet read differently by two
 // handlers.
 bool carriesObjectHashFields(const meshtastic_StoreForwardPlusPlus &in)
 {
-    return in.message_hash.size != 0 || in.commit_hash.size != 0;
+    return in.message_hash.size != 0;
 }
 
 bool commonHeaderValid(const meshtastic_StoreForwardPlusPlus &in, Scope &scope)
