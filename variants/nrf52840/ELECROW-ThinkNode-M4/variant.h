@@ -67,6 +67,8 @@ extern "C" {
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 
+// Battery level comes from the power-bank MCU over a software UART
+#define HAS_POWERBANK 1
 #define HAS_SERIAL_BATTERY_LEVEL 1
 #define SERIAL_BATTERY_RX 30
 #define SERIAL_BATTERY_TX 5
