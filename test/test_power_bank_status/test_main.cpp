@@ -413,6 +413,20 @@ void test_page_shows_idle_rather_than_stale_ports(void)
 }
 
 // Frames stopping while IO2 is still high is a broken link, not an idle bank: something may be plugged in.
+// IO2 can drop within the 3 s freshness window of the last frame: asleep wins, so the ports are not shown.
+void test_page_shows_idle_as_soon_as_the_controller_sleeps(void)
+{
+    PowerBankStatus st;
+    st.batteryMv = 4100;
+    st.batteryPercent = 80;
+    PowerBankDetail d;
+    hlt331Detail(controllerFrame(4100, 80, false, HLT331Status::PORT_DISCHARGING, 0), true, true, d);
+    TEST_ASSERT_FALSE(d.live);
+    char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
+    TEST_ASSERT_EQUAL_UINT8(2, graphics::PowerBankPage::formatLines(true, st, true, d, lines));
+    TEST_ASSERT_EQUAL_STRING("Idle, nothing plugged in", lines[1]);
+}
+
 void test_page_does_not_call_a_silent_controller_idle(void)
 {
     PowerBankStatus st;
@@ -461,6 +475,7 @@ void setup()
     RUN_TEST(test_page_puts_the_protocol_on_the_active_port);
     RUN_TEST(test_page_shows_idle_rather_than_stale_ports);
     RUN_TEST(test_page_does_not_call_a_silent_controller_idle);
+    RUN_TEST(test_page_shows_idle_as_soon_as_the_controller_sleeps);
     RUN_TEST(test_page_without_status_or_detail);
     exit(UNITY_END());
 }

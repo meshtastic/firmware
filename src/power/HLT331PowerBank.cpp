@@ -177,6 +177,9 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
     // stopped for VBUS_RELEASE_MS, so the bank can power a device plugged into C2.
     void updateBoardVbus()
     {
+        // Latched: deadlinePassed() reads false again about 24.9 days after the deadline.
+        if (!vbusHoldDone && Throttle::deadlinePassed(vbusHoldUntilMs))
+            vbusHoldDone = true;
         if (hlt331WantsC2Vbus(isFresh(), parser.status())) {
             vbusUnwantedSinceMs = 0;
             setBoardVbus(true);
@@ -184,7 +187,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         }
         if (vbusUnwantedSinceMs == 0)
             vbusUnwantedSinceMs = Time::stampMillis();
-        if (Throttle::deadlinePassed(vbusHoldUntilMs) && Throttle::hasElapsed(vbusUnwantedSinceMs, VBUS_RELEASE_MS))
+        if (vbusHoldDone && Throttle::hasElapsed(vbusUnwantedSinceMs, VBUS_RELEASE_MS))
             setBoardVbus(false);
     }
 
@@ -199,6 +202,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
 
     bool boardVbus = true; // initVariant() connects it
     uint32_t vbusHoldUntilMs = 0;
+    bool vbusHoldDone = false;
     uint32_t vbusUnwantedSinceMs = 0;
 #endif
 

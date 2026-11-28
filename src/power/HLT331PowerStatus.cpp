@@ -47,7 +47,7 @@ static PowerBankDetail::PortState portState(uint8_t state)
 void hlt331Detail(const HLT331Status &s, bool live, bool asleep, PowerBankDetail &out)
 {
     out = PowerBankDetail();
-    out.live = live;
+    out.live = live && !asleep; // IO2 can drop within STALE_MS of the last frame
     out.asleep = asleep;
     out.numPorts = 2;
     out.portNames[0] = "C1";
