@@ -268,10 +268,6 @@ NullSensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
-RAK9154Sensor rak9154Sensor;
-#endif
-
 #ifdef HAS_PPM
 // note: XPOWERS_CHIP_XXX must be defined in variant.h
 #include <XPowersLib.h>
@@ -382,9 +378,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual int getBatteryPercent() override
     {
-#if defined(HAS_RAKPROT) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && defined(HAS_RAKHUB) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasRAK()) {
-            return rak9154Sensor.getBusBatteryPercent();
+            return rakSensorHub.getBusBatteryPercent();
         }
 #endif
 
@@ -432,7 +428,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
-#if HAS_TELEMETRY && defined(HAS_RAKPROT) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && defined(HAS_RAKHUB) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasRAK()) {
             return getRAKVoltage();
         }
@@ -632,9 +628,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (sgm41562 && sgm41562->refresh())
             return sgm41562->isCharging();
 #endif
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKHUB) && !defined(HAS_PMU)
         if (hasRAK()) {
-            return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
+            return (rakSensorHub.isCharging()) ? OptTrue : OptFalse;
         }
 #endif
         // A configured INA outranks the board's own charge-status pin, as it does BATTERY_PIN in
@@ -692,15 +688,16 @@ class AnalogBatteryLevel : public HasBatteryLevel
     uint32_t Vref = 3300;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKHUB)
 
-    uint16_t getRAKVoltage() { return rak9154Sensor.getBusVoltageMv(); }
+    uint16_t getRAKVoltage() { return rakSensorHub.getBusVoltageMv(); }
 
+    /** True while a RAK9154 battery on the 1-Wire bus reports a voltage. */
     bool hasRAK()
     {
-        if (!rak9154Sensor.isInitialized())
-            return rak9154Sensor.runOnce() > 0;
-        return rak9154Sensor.isRunning();
+        if (!rakSensorHub.isInitialized())
+            rakSensorHub.runOnce();
+        return rakSensorHub.getBusVoltageMv() > 0;
     }
 #endif
 

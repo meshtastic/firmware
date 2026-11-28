@@ -80,9 +80,8 @@ extern NullSensor max17048Sensor;
 #endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
-#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
-extern RAK9154Sensor rak9154Sensor;
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKHUB
+#include "modules/Telemetry/Sensor/RAKSensorHub.h"
 #endif
 
 #ifdef HAS_PMU
