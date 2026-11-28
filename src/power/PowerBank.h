@@ -18,8 +18,9 @@ struct PowerBankDetail {
     static constexpr uint8_t MAX_TEMPERATURES = 2;
     enum PortState : uint8_t { PORT_IDLE, PORT_CHARGING_BANK, PORT_POWERING_DEVICE };
 
-    // False while the controller is asleep: only the battery fields of the status are current.
+    // False while the controller is asleep or silent: only the battery fields of the status are current.
     bool live = false;
+    bool asleep = false; // the controller is idle because nothing is plugged in; false if it has gone silent
     uint8_t numPorts = 0;
     const char *portNames[MAX_PORTS] = {};
     PortState portStates[MAX_PORTS] = {};

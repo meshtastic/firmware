@@ -44,10 +44,11 @@ static PowerBankDetail::PortState portState(uint8_t state)
     }
 }
 
-void hlt331Detail(const HLT331Status &s, bool live, PowerBankDetail &out)
+void hlt331Detail(const HLT331Status &s, bool live, bool asleep, PowerBankDetail &out)
 {
     out = PowerBankDetail();
     out.live = live;
+    out.asleep = asleep;
     out.numPorts = 2;
     out.portNames[0] = "C1";
     out.portNames[1] = "C2";

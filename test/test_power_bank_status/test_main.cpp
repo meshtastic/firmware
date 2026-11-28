@@ -24,7 +24,8 @@
 //  - USB cut while a computer charges the bank on C2, or C2 kept connected to the board (so a phone on
 //    C2 gets no power) when C2 is supplying a device, is idle, or the frame is stale;
 //  - C1/C2 states or protocol names swapped on the page, the fast-charge protocol shown away from the port
-//    using it, or a sleeping controller's stale port states shown as live.
+//    using it, or a sleeping controller's stale port states shown as live;
+//  - a controller that has gone silent while awake shown as idle, when a device may still be plugged in.
 #include "Arduino.h" // declares setup()/loop() with the linkage the framework's main() calls
 #include "TestUtil.h"
 #include "graphics/draw/PowerBankPage.h"
@@ -310,7 +311,7 @@ void test_detail_maps_ports_protocols_and_temperatures(void)
     s.ntc1TempC = -10;
     s.ntc2TempC = 45;
     PowerBankDetail d;
-    hlt331Detail(s, true, d);
+    hlt331Detail(s, true, false, d);
     TEST_ASSERT_TRUE(d.live);
     TEST_ASSERT_EQUAL_UINT8(2, d.numPorts);
     TEST_ASSERT_EQUAL_STRING("C1", d.portNames[0]);
@@ -349,7 +350,7 @@ void test_page_shows_live_ports_wireless_bus_and_temperatures(void)
     s.ntc1TempC = 51;
     s.ntc2TempC = 56;
     PowerBankDetail d;
-    hlt331Detail(s, true, d);
+    hlt331Detail(s, true, false, d);
     char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
     TEST_ASSERT_EQUAL_UINT8(4, graphics::PowerBankPage::formatLines(true, st, true, d, lines));
     TEST_ASSERT_EQUAL_STRING("Battery 87% 4.10V", lines[0]);
@@ -368,7 +369,7 @@ void test_page_flags_charging_foreign_object_and_heat(void)
     s.wirelessForeignObject = true;
     s.ntcOverTemp = true;
     PowerBankDetail d;
-    hlt331Detail(s, true, d);
+    hlt331Detail(s, true, false, d);
     char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
     graphics::PowerBankPage::formatLines(true, st, true, d, lines);
     TEST_ASSERT_EQUAL_STRING("Battery 100% 4.44V charging", lines[0]);
@@ -387,13 +388,13 @@ void test_page_puts_the_protocol_on_the_active_port(void)
     HLT331Status s = controllerFrame(4265, 99, false, HLT331Status::PORT_DISCHARGING, 0);
     s.fastChargeMode = 6;
     PowerBankDetail d;
-    hlt331Detail(s, true, d);
+    hlt331Detail(s, true, false, d);
     char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
     graphics::PowerBankPage::formatLines(true, st, true, d, lines);
     TEST_ASSERT_EQUAL_STRING("C1 Out PD  C2 -", lines[1]);
 
     s.c2State = HLT331Status::PORT_CHARGING;
-    hlt331Detail(s, true, d);
+    hlt331Detail(s, true, false, d);
     graphics::PowerBankPage::formatLines(true, st, true, d, lines);
     TEST_ASSERT_EQUAL_STRING("C1 Out  C2 In  PD", lines[1]);
 }
@@ -405,10 +406,23 @@ void test_page_shows_idle_rather_than_stale_ports(void)
     st.batteryMv = 4426;
     st.batteryPercent = 100;
     PowerBankDetail d;
-    hlt331Detail(controllerFrame(4426, 100, true, 0, HLT331Status::PORT_CHARGING), false, d);
+    hlt331Detail(controllerFrame(4426, 100, true, 0, HLT331Status::PORT_CHARGING), false, true, d);
     char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
     TEST_ASSERT_EQUAL_UINT8(2, graphics::PowerBankPage::formatLines(true, st, true, d, lines));
     TEST_ASSERT_EQUAL_STRING("Idle, nothing plugged in", lines[1]);
+}
+
+// Frames stopping while IO2 is still high is a broken link, not an idle bank: something may be plugged in.
+void test_page_does_not_call_a_silent_controller_idle(void)
+{
+    PowerBankStatus st;
+    st.batteryMv = 4100;
+    st.batteryPercent = 80;
+    PowerBankDetail d;
+    hlt331Detail(controllerFrame(4100, 80, false, HLT331Status::PORT_DISCHARGING, 0), false, false, d);
+    char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
+    TEST_ASSERT_EQUAL_UINT8(2, graphics::PowerBankPage::formatLines(true, st, true, d, lines));
+    TEST_ASSERT_EQUAL_STRING("No data from power bank", lines[1]);
 }
 
 void test_page_without_status_or_detail(void)
@@ -446,6 +460,7 @@ void setup()
     RUN_TEST(test_page_flags_charging_foreign_object_and_heat);
     RUN_TEST(test_page_puts_the_protocol_on_the_active_port);
     RUN_TEST(test_page_shows_idle_rather_than_stale_ports);
+    RUN_TEST(test_page_does_not_call_a_silent_controller_idle);
     RUN_TEST(test_page_without_status_or_detail);
     exit(UNITY_END());
 }

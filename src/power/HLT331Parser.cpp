@@ -47,8 +47,9 @@ bool HLT331Parser::feed(uint8_t byte)
             dataIndex = 0;
             state = READ_DATA;
         } else {
+            // Noise ending in A5 5A swallows the next frame's A5 here: keep it as a header start.
             badLengthCount++;
-            state = WAIT_HEADER_0;
+            state = byte == HEADER_0 ? WAIT_HEADER_1 : WAIT_HEADER_0;
         }
         return false;
     case READ_DATA:

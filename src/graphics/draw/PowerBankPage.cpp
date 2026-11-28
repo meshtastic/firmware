@@ -52,7 +52,7 @@ uint8_t formatLines(bool haveStatus, const PowerBankStatus &status, bool haveDet
         return n;
     }
     if (!detail.live) {
-        append(lines[n++], "Idle, nothing plugged in");
+        append(lines[n++], detail.asleep ? "Idle, nothing plugged in" : "No data from power bank");
         return n;
     }
 
