@@ -145,7 +145,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #endif
 
 #ifdef HAS_RAKHUB
-#include "Sensor/RAKSensorHub.h" // env:rak_wismesh_sensorhub only
+#include "Sensor/RAKSensorHub.h" // env:rak2560 only
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -421,14 +421,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-            // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-            // sensormap here.
-#ifdef HAS_RAKPROT
-            if (rak9154Sensor.hasSensor())
-                result = rak9154Sensor.runOnce();
-#endif
 #ifdef HAS_RAKHUB
-            // 1-Wire SensorHub poll (not I2C); same UART as legacy RAK9154 but different env macro
+            // WisMesh Hub 1-Wire bus (not I2C, so no sensor map): RAK9154 battery and SensorHub probes
             if (rakSensorHub.hasSensor())
                 result = rakSensorHub.runOnce();
 #endif
@@ -740,13 +734,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (max17048Sensor.hasSensor()) {
         get_metrics = max17048Sensor.getMetrics(m);
-        valid = valid || get_metrics;
-        hasSensor = true;
-    }
-#endif
-#ifdef HAS_RAKPROT
-    if (rak9154Sensor.hasSensor()) {
-        get_metrics = rak9154Sensor.getMetrics(m);
         valid = valid || get_metrics;
         hasSensor = true;
     }

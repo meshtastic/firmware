@@ -17,7 +17,7 @@
 /// Readings older than two missed polls are not reported.
 static constexpr uint32_t RAKHUB_MAX_READING_AGE_MS = 2 * RAKHUB_POLL_INTERVAL_MS + 5 * 1000;
 
-/** 1-Wire SensorHub driver (env:rak_wismesh_sensorhub). IPSO parse/cache in RAKSensorHubUplink.cpp. */
+/** 1-Wire bus driver for the RAK2560: RAK9154 battery and SensorHub probes. IPSO parse/cache in RAKSensorHubUplink.cpp. */
 class RAKSensorHub : public TelemetrySensor, VoltageSensor, CurrentSensor
 {
   protected:
