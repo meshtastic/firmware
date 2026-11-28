@@ -189,13 +189,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
     static bool isValidNoiseRssi(int16_t rssi) { return rssi < 0 && rssi >= NOISE_FLOOR_VALID_MIN; }
 
-    /**
-     * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
-     * Implementations should return dBm, or an invalid value that updateNoiseFloor()
-     * can reject.
-     */
-    virtual int16_t getCurrentRSSI() = 0;
-
   public:
     /** Our ISR code currently needs this to find our active instance
      */
@@ -377,6 +370,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
      *  with rearmReceive() before anything else touches the radio. */
     virtual bool isChannelActive() = 0;
+
+    /** Pure virtual hook for derived radio interfaces to provide instantaneous RSSI in dBm */
+    int16_t getCurrentRSSI() override = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
      *  This method is only public to facilitate debugging.  Do not call.
@@ -692,6 +688,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void unlockRadioSequence() {}
 #endif
 
+  public:
     /** Held across a whole RadioLib call sequence, so the readout task cannot run between its calls.
      *
      *  The SPI lock is per transaction, so it does not span a sequence, and every driver's readData() ends by
@@ -709,7 +706,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     class RadioSequence
     {
       public:
-        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface->lockRadioSequence()) {}
+        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface && iface->lockRadioSequence()) {}
         ~RadioSequence()
         {
             if (held)
@@ -723,6 +720,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         bool held;
     };
 
+  protected:
 #ifdef MESHTASTIC_RX_READOUT_TASK
     /** From the RX_DONE interrupt, wake the readout task; false if there is none. The interrupt stays enabled, and the
      *  task notifies ISR_RX once the frame is out of the radio. */

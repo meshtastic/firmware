@@ -32,8 +32,14 @@ class RadioTxHook
     /// The driver is about to transmit p (NULL when the queue is empty): set up any state it needs.
     virtual PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p) { return PRETX_SEND; }
 
+    /// Remaining delay (ms) requested by this hook after PRETX_DEFER, or 0 for default CSMA.
+    virtual uint32_t getDeferDelayMs(uint32_t now) const { return 0; }
+
     /// True while p needs the radio left on its own config, so the driver must not listen instead.
     virtual bool holdsRadio(const meshtastic_MeshPacket *p) { return false; }
+
+    /// The driver completed transmitting p.
+    virtual void postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
 
     /// The driver is done with p - sent, cancelled or dropped. Release anything held for it.
     virtual void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
@@ -45,6 +51,8 @@ class RadioTxHooks
   public:
     /// The first hook not returning PRETX_SEND decides, and the rest are not consulted.
     static RadioTxHook::PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p);
+    static uint32_t getDeferDelayMs(uint32_t now);
     static bool holdsRadio(const meshtastic_MeshPacket *p);
+    static void postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p);
     static void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p);
 };

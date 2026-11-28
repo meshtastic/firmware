@@ -19,6 +19,7 @@
 #include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "meshUtils.h" // for pow_of_2
+#include "regulatory/JapanTxHook.h"
 #include "sleep.h"
 #include <algorithm>
 #include <assert.h>
@@ -383,6 +384,7 @@ extern SPIClass SPI1;
 
 std::unique_ptr<RadioInterface> initLoRa()
 {
+    initJapanTxHook();
     std::unique_ptr<RadioInterface> rIf = nullptr;
 
 #if ARCH_PORTDUINO
@@ -829,6 +831,48 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
     return getPacketTime(pl, received);
 }
 
+uint32_t RadioInterface::calculateLoRaAirtimeMs(float bwKHz, uint8_t sf, uint8_t cr, uint32_t payloadLen)
+{
+    if (bwKHz <= 0.0f || sf < LORA_SF_MIN || sf > LORA_SF_MAX)
+        return 0;
+    if (cr < LORA_CR_MIN || cr > LORA_CR_MAX)
+        cr = LORA_CR_DEFAULT;
+
+    // Symbol length in microseconds: (10000 << sf) / (bwKHz * 10)
+    uint32_t symbolLength_us = ((uint32_t)10000 << sf) / (uint32_t)(bwKHz * 10.0f);
+
+    // Low Data Rate Optimization is required when symbol duration > 16 ms (16000 us)
+    bool ldrOptimize = (symbolLength_us > 16000);
+
+    uint8_t sfDivisor = 4 * sf;
+    if (ldrOptimize) {
+        sfDivisor = 4 * (sf - 2);
+    }
+    if (sfDivisor == 0)
+        return 0;
+
+    uint8_t sfCoeff1_x4 = 17; // 4.25 * 4
+    uint8_t sfCoeff2 = 8;
+    if (sf == 5 || sf == 6) {
+        sfCoeff1_x4 = 25; // 6.25 * 4
+        sfCoeff2 = 0;
+    }
+
+    constexpr int8_t bitsPerCrc = 16;
+    constexpr int8_t nSymbolHeader = 20; // explicit header
+    constexpr uint16_t preambleLen = 16; // Meshtastic default preamble length
+
+    int32_t bitCount = (int32_t)8 * payloadLen + bitsPerCrc - 4 * sf + sfCoeff2 + nSymbolHeader;
+    if (bitCount < 0)
+        bitCount = 0;
+
+    uint32_t nPreCodedSymbols = (bitCount + (sfDivisor - 1)) / sfDivisor;
+    uint32_t nSymbol_x4 = (preambleLen + 8) * 4 + sfCoeff1_x4 + nPreCodedSymbols * cr * 4;
+
+    uint64_t totalTimeUs = ((uint64_t)symbolLength_us * nSymbol_x4) / 4;
+    return (uint32_t)((totalTimeUs + 999) / 1000);
+}
+
 /**
  * Calculate airtime per
  * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
@@ -1117,6 +1161,7 @@ bool isRadioPin(uint32_t pin)
 bool RadioInterface::reconfigure()
 {
     applyModemConfig();
+    initJapanTxHook();
     return true;
 }
 
@@ -1363,6 +1408,33 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     } else {
         // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+        if (newRegion->code == meshtastic_Config_LoRaConfig_RegionCode_JP) {
+            uint8_t sf = clampSpreadFactor(loraConfig.spread_factor);
+            uint8_t cr = clampCodingRate(loraConfig.coding_rate);
+            uint32_t maxAirtimeMs = calculateLoRaAirtimeMs(check_bw, sf, cr, MAX_LORA_PAYLOAD_LEN);
+            if (maxAirtimeMs > JapanTxHook::getMaxTxDurationMs(newRegion->code)) {
+                if (clamp) {
+                    const char *defaultName =
+                        DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true);
+                    snprintf(err_string, sizeof(err_string),
+                             "Custom LoRa config airtime %ums exceeds 4s limit for %s, clamped to %s", maxAirtimeMs,
+                             newRegion->name, defaultName);
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string,
+                                          meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION,
+                                          meshtastic_LogRecord_Level_INFO);
+                    loraConfig.use_preset = true;
+                    loraConfig.modem_preset = newRegion->getDefaultPreset();
+                    loraConfig.coding_rate = 0;
+                    check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+                } else {
+                    snprintf(err_string, sizeof(err_string), "Custom LoRa config airtime %ums exceeds 4s limit for %s",
+                             maxAirtimeMs, newRegion->name);
+                    LOG_INFO("%s, defer to clamp", err_string);
+                    return false;
+                }
+            }
+        }
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
@@ -1480,15 +1552,12 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+    // Clamp before branching so a custom >4 s fallback switches to preset mode before selecting params.
+    clampConfigLora(loraConfig);
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig)) {
-            // A failed pin alone must not cost a valid preset; the clamp can also swap EU sibling regions
-            clampConfigLora(loraConfig);
-            newRegion = myRegion = getRegion(loraConfig.region);
-        }
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
@@ -1505,11 +1574,6 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig)) {
-        } else {
-            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
-            clampConfigLora(loraConfig);
-        }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;

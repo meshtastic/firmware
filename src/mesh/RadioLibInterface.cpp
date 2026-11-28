@@ -589,6 +589,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
             // too: inside it the readout task cannot be partway through the re-arm it is taking over.
             RadioSequence seq(this);
             sent = handleTransmitInterrupt(); // radio already back on the home config
+            // Stamp carrier-off before pre-stage beforeTransmit() so queued packets see the 50ms pause instead of standby RSSI.
+            if (sent)
+                RadioTxHooks::postTransmit(this, sent);
             // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
             // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
             // but it keeps the post-TX listen window on the channel we are about to transmit on.
@@ -671,43 +674,50 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
-                } else if (const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
-                           action == RadioTxHook::PRETX_DROP) {
-                    // A module refuses this packet on the radio config we are holding: drop it rather
-                    // than transmit it, and move on to the next queued packet.
-                    meshtastic_MeshPacket *bad = txQueue.dequeue();
-                    LOG_DEBUG("Drop Tx packet 0x%08x, refused before transmit", bad->id);
-                    RadioTxHooks::packetReleased(this, bad);
-                    packetPool.release(bad);
-                    setTransmitDelay();
-                } else if (action == RadioTxHook::PRETX_DEFER) {
-                    setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
-                    // The scan and the transmit it decides are one sequence: a readout landing between them would
-                    // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
-                    RadioSequence seq(this);
-                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
-                    LOG_DEBUG_RADIO("CAD arm");
-                    scanForTx = txp;
-                    const bool channelActive = isChannelActive();
-                    scanForTx = nullptr;
-                    if (channelActive) { // currently traffic on the channel?
-                        LOG_DEBUG_RADIO("CAD busy");
-                        // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
-                        // config, so skipping this only ever left the node deaf in standby.
-                        rearmReceive();
+                    const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
+                    if (action == RadioTxHook::PRETX_DROP) {
+                        // A module refuses this packet on the radio config we are holding: drop it rather
+                        // than transmit it, and move on to the next queued packet.
+                        meshtastic_MeshPacket *bad = txQueue.dequeue();
+                        LOG_DEBUG("Drop Tx packet 0x%08x, refused before transmit", bad->id);
+                        RadioTxHooks::packetReleased(this, bad);
+                        packetPool.release(bad);
                         setTransmitDelay();
+                    } else if (action == RadioTxHook::PRETX_DEFER) {
+                        const uint32_t deferMs = RadioTxHooks::getDeferDelayMs(Time::getMillis());
+                        if (deferMs > 0) {
+                            notifyLater(deferMs, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                        } else {
+                            setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                        }
                     } else {
-                        LOG_DEBUG_RADIO("CAD free");
-                        if (peek)
-                            LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
-                                            Time::getMillis() - peekHoldStart);
-                        // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
-                        // actual transmission as short as possible
-                        txp = txQueue.dequeue();
-                        assert(txp);
-                        startSend(txp);
-                        LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        // The scan and the transmit it decides are one sequence: a readout landing between them would
+                        // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
+                        RadioSequence seq(this);
+                        // Listen-before-talk: a CAD preamble scan immediately before we key up.
+                        LOG_DEBUG_RADIO("CAD arm");
+                        scanForTx = txp;
+                        const bool channelActive = isChannelActive();
+                        scanForTx = nullptr;
+                        if (channelActive) { // currently traffic on the channel?
+                            LOG_DEBUG_RADIO("CAD busy");
+                            // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
+                            // config, so skipping this only ever left the node deaf in standby.
+                            rearmReceive();
+                            setTransmitDelay();
+                        } else {
+                            LOG_DEBUG_RADIO("CAD free");
+                            if (peek)
+                                LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
+                                                Time::getMillis() - peekHoldStart);
+                            // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan
+                            // and actual transmission as short as possible
+                            txp = txQueue.dequeue();
+                            assert(txp);
+                            startSend(txp);
+                            LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        }
                     }
                 }
             }
@@ -839,7 +849,10 @@ meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
 
 void RadioLibInterface::completeSending()
 {
-    finishSentPacket(detachSentPacket());
+    if (auto p = detachSentPacket()) {
+        RadioTxHooks::postTransmit(this, p);
+        finishSentPacket(p);
+    }
 }
 
 meshtastic_MeshPacket *RadioLibInterface::detachSentPacket()
@@ -1569,8 +1582,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            // This send failed, but make sure to 'complete' it properly
-            completeSending();
+            finishSentPacket(detachSentPacket());
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {

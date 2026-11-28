@@ -28,12 +28,29 @@ RadioTxHook::PreTxAction RadioTxHooks::beforeTransmit(RadioInterface *iface, mes
     return RadioTxHook::PRETX_SEND;
 }
 
+uint32_t RadioTxHooks::getDeferDelayMs(uint32_t now)
+{
+    uint32_t maxDelay = 0;
+    for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook) {
+        const uint32_t d = h->getDeferDelayMs(now);
+        if (d > maxDelay)
+            maxDelay = d;
+    }
+    return maxDelay;
+}
+
 bool RadioTxHooks::holdsRadio(const meshtastic_MeshPacket *p)
 {
     for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
         if (h->holdsRadio(p))
             return true;
     return false;
+}
+
+void RadioTxHooks::postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
+        h->postTransmit(iface, p);
 }
 
 void RadioTxHooks::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
