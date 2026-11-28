@@ -46,10 +46,9 @@ void BaseUIEInkDisplay::addFrameFlag(frameFlagTypes flag)
     frameFlags = (frameFlagTypes)(frameFlags | flag);
 }
 
-void BaseUIEInkDisplay::setDisplayResilience(uint8_t fastPerFull, float stressMultiplier)
+void BaseUIEInkDisplay::setDisplayResilience(uint8_t fastPerFull)
 {
     this->fastPerFull = (fastPerFull == 0) ? 1 : fastPerFull;
-    this->stressMultiplier = stressMultiplier;
 }
 
 void BaseUIEInkDisplay::joinAsyncRefresh()
@@ -87,8 +86,8 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
     if (lastDrawMsec != 0 && (now - lastDrawMsec) < msecLimit)
         return false;
 
-    // An unchanged frame is skipped before decide(), which charges refresh debt for every frame: an idle screen ticking
-    // once a second would otherwise run a FULL every fastPerFull seconds. COSMETIC still redraws; a held FULL still runs.
+    // An unchanged frame is skipped before decide(), which counts every frame: an idle screen ticking once a second would
+    // otherwise run a FULL every fastPerFull seconds. COSMETIC still redraws; a held FULL still runs.
     const uint32_t hash = frameHash();
     const bool heldFull = framePending && pendingType == Drivers::EInk::UpdateTypes::FULL;
     if (hash == lastHash && lastDrawMsec != 0 && !(frameFlags & COSMETIC) && !heldFull) {
@@ -100,7 +99,7 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
     }
 
     Drivers::EInk::UpdateTypes type = decide();
-    // A held FULL frame was already charged against the refresh debt; whatever replaces it must still be FULL
+    // A held FULL frame already reset the FAST count; whatever replaces it must still be FULL
     if (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL)
         type = Drivers::EInk::UpdateTypes::FULL;
     // Decide on the type the panel will actually run: commit() turns FAST into FULL where FAST is unsupported
@@ -171,35 +170,26 @@ Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
 {
     typedef Drivers::EInk::UpdateTypes UT;
 
-    const bool unlimitedFast = frameFlags & UNLIMITED_FAST;
-
     // Explicit flag wins outright
     if (frameFlags & COSMETIC) {
-        fullRefreshDebt = max(fullRefreshDebt - 1.0f, 0.0f);
+        fastSinceFull = 0;
         return UT::FULL;
     }
-    if (frameFlags & DEMAND_FAST) {
-        if (!unlimitedFast) {
-            fullRefreshDebt += (fullRefreshDebt < 1.0f) ? (1.0f / fastPerFull) : (stressMultiplier * (1.0f / fastPerFull));
-        }
+
+    // A requested FAST is never refused. UNLIMITED_FAST frames don't count towards the next FULL.
+    if (frameFlags & (DEMAND_FAST | RESPONSIVE | UNLIMITED_FAST)) {
+        if (!(frameFlags & UNLIMITED_FAST) && fastSinceFull < UINT16_MAX)
+            fastSinceFull++;
         return UT::FAST;
     }
 
-    const bool explicitFast = frameFlags & RESPONSIVE;
-
-    if (explicitFast || unlimitedFast) {
-        if (!unlimitedFast) {
-            fullRefreshDebt += (fullRefreshDebt < 1.0f) ? (1.0f / fastPerFull) : (stressMultiplier * (1.0f / fastPerFull));
-        }
-        return UT::FAST;
-    }
-
-    // BACKGROUND / unspecified: let debt decide
-    if (fullRefreshDebt >= 1.0f) {
-        fullRefreshDebt = max(fullRefreshDebt - 1.0f, 0.0f);
+    // BACKGROUND: FULL once enough FAST refreshes have built up. One FULL redraws the whole image, so however far past
+    // the limit the count went, it starts again from zero rather than spending FULLs on the next few frames.
+    if (fastSinceFull >= fastPerFull) {
+        fastSinceFull = 0;
         return UT::FULL;
     }
-    fullRefreshDebt += 1.0f / fastPerFull;
+    fastSinceFull++;
     return UT::FAST;
 }
 

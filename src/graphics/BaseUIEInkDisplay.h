@@ -53,8 +53,8 @@ class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
     void enableUnlimitedFastMode() { addFrameFlag(UNLIMITED_FAST); }
     void disableUnlimitedFastMode() { frameFlags = (frameFlagTypes)(frameFlags & ~UNLIMITED_FAST); }
 
-    // Tuning, called once per panel profile
-    void setDisplayResilience(uint8_t fastPerFull, float stressMultiplier = 2.0f);
+    // Tuning, called once per panel profile: how many FAST refreshes before a BACKGROUND frame is drawn FULL
+    void setDisplayResilience(uint8_t fastPerFull);
 
     // Exposed so Screen.cpp / variants can read the rotation passed in at construction
     uint8_t getRotation() const { return rotation; }
@@ -69,7 +69,7 @@ class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
     uint8_t panelRotation() const; // rotation, plus 180° for flip_screen
     uint32_t frameHash() const;    // of the OLEDDisplay buffer and panelRotation(), for frame-skip comparison
 
-    // Decide FULL vs FAST based on current frame flags + accumulated debt.
+    // Decide FULL vs FAST from the frame flags and the FAST refreshes since the last FULL.
     Drivers::EInk::UpdateTypes decide();
 
     // Pushes the frame held back while the panel was busy, once it is free
@@ -88,10 +88,9 @@ class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
     static constexpr uint32_t FLUSH_POLL_MS = 20;
     uint32_t lastHash = 0;
 
-    // DisplayHealth-style debt tracking
-    float fullRefreshDebt = 0.0f;
+    // FAST refreshes since the last FULL
+    uint16_t fastSinceFull = 0;
     uint8_t fastPerFull = 7;
-    float stressMultiplier = 2.0f;
 };
 
 } // namespace NicheGraphics
