@@ -360,6 +360,9 @@ static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
                              RadioInterface::resolveFrequencySlot(config.lora, channelFile.channels[0].settings.name));
 }
 
+static bool restorePrefsOnDisk = false;
+static meshtastic_CriticalErrorCode savedErrorCode;
+
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
 {
     // EU_868 span is 250kHz. A 500kHz custom BW should be clamped to default preset BW.
@@ -690,6 +693,8 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    savedErrorCode = error_code;
+    error_code = meshtastic_CriticalErrorCode_NONE;
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
@@ -701,6 +706,18 @@ static void dropRestoreCryptoStub();
 static void restoreAdminRadioGlobals()
 {
     dropRestoreCryptoStub();
+    devicestate = savedDeviceState;
+    owner = savedOwner;
+    config = savedConfig;
+    channelFile = savedChannelFile;
+    error_code = savedErrorCode;
+    if (restorePrefsOnDisk) {
+        restorePrefsOnDisk = false;
+        if (replacementNodeDB)
+            replacementNodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS);
+        else if (savedNodeDB)
+            savedNodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS);
+    }
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
@@ -708,11 +725,71 @@ static void restoreAdminRadioGlobals()
     hamMockRouter = nullptr;
     delete replacementNodeDB;
     replacementNodeDB = nullptr;
-    devicestate = savedDeviceState;
-    owner = savedOwner;
-    config = savedConfig;
-    channelFile = savedChannelFile;
     initRegion();
+}
+
+// NodeDB::loadFromDisk() runs clampLoadedLoraConfig() before NodeDB::NodeDB() snapshots configCRC
+// and channelFileCRC. Mutations applied by the clamp (clearing an invalid channel_num or renaming a
+// legacy "Default" primary channel to "") must still be flagged for persistence, or the same invalid
+// config is reloaded on every subsequent reboot.
+static void test_nodedb_bootClampLoraConfigPersistsToDisk()
+{
+    restorePrefsOnDisk = true;
+
+    auto rebootNodeDB = []() {
+        delete replacementNodeDB;
+        replacementNodeDB = nullptr;
+        nodeDB = nullptr;
+        nodeDatabase.version = 0;
+        nodeDatabase.nodes.clear();
+        devicestate = meshtastic_DeviceState_init_zero;
+        config = meshtastic_LocalConfig_init_zero;
+        channelFile = meshtastic_ChannelFile_init_zero;
+        error_code = meshtastic_CriticalErrorCode_NONE;
+        capturedWarnings.clear();
+        capturedTypes.clear();
+        replacementNodeDB = new NodeDB();
+        nodeDB = replacementNodeDB;
+    };
+
+    // Settle key generation and boot interval defaults first so only the clamp mutates the next boot.
+    config.has_lora = true;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 1;
+    channels.initDefaults();
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS));
+    rebootNodeDB();
+
+    config.lora.channel_num = 200; // exceeds US LongFast's 104 slots
+    strncpy(channelFile.channels[0].settings.name, "Default", sizeof(channelFile.channels[0].settings.name));
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS));
+
+    // Boot 1: clamps in memory AND must persist both repaired segments back to disk.
+    rebootNodeDB();
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+
+    meshtastic_LocalConfig diskCfg = meshtastic_LocalConfig_init_zero;
+    TEST_ASSERT_EQUAL(LoadFileResult::LOAD_SUCCESS,
+                      nodeDB->loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                                        &meshtastic_LocalConfig_msg, &diskCfg));
+    TEST_ASSERT_EQUAL_UINT32(0, diskCfg.lora.channel_num);
+
+    meshtastic_ChannelFile diskChannels = meshtastic_ChannelFile_init_zero;
+    TEST_ASSERT_EQUAL(LoadFileResult::LOAD_SUCCESS,
+                      nodeDB->loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile),
+                                        &meshtastic_ChannelFile_msg, &diskChannels));
+    TEST_ASSERT_EQUAL_STRING("", diskChannels.channels[0].settings.name);
+
+    // Boot 2: reads clean persisted files without re-clamping or re-latching INVALID_RADIO_SETTING.
+    rebootNodeDB();
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_TRUE(capturedTypes.empty());
 }
 
 static void installEncryptedAndAdminChannels()
@@ -2680,6 +2757,7 @@ void setup()
 
     // clampConfigLora()
     RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
+    RUN_TEST(test_nodedb_bootClampLoraConfigPersistsToDisk);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
