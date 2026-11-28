@@ -240,12 +240,14 @@ void drawPowerBankBattery(OLEDDisplay *display, int16_t x, int16_t y, bool valid
         display->drawVerticalLine(x + 9 + i * 83 / 10, y + 51, 6);
 }
 
-void drawPowerBankTemperature(OLEDDisplay *display, int16_t x, int16_t y, bool valid, int16_t valueX10)
+// hot: the controller's NTC over-temperature flag, which the gauge's cell temperature may not show. Rings the badge red.
+void drawPowerBankTemperature(OLEDDisplay *display, int16_t x, int16_t y, bool valid, int16_t valueX10, bool hot)
 {
-    drawPowerBankDisk(display, x + 132, y + 24, 11, POWER_BANK_BADGE, POWER_BANK_BLUE);
+    const uint16_t ring = hot ? POWER_BANK_FAULT : POWER_BANK_BADGE;
+    drawPowerBankDisk(display, x + 132, y + 24, 11, ring, POWER_BANK_BLUE);
     // Clip inner color regions to their parent disks, preserving the blue corners.
-    registerTFTColorRegionDirect(x + 126, y + 15, 13, 19, POWER_BANK_BADGE, POWER_BANK_TEMP_VALUE);
-    registerTFTColorRegionDirect(x + 123, y + 18, 19, 13, POWER_BANK_BADGE, POWER_BANK_TEMP_VALUE);
+    registerTFTColorRegionDirect(x + 126, y + 15, 13, 19, ring, POWER_BANK_TEMP_VALUE);
+    registerTFTColorRegionDirect(x + 123, y + 18, 19, 13, ring, POWER_BANK_TEMP_VALUE);
     display->setColor(BLACK);
     fillPowerBankCircle(display, x + 132, y + 24, 9);
     registerTFTColorRegionDirect(x + 128, y + 16, 9, 17, POWER_BANK_TEMP_BACKGROUND, POWER_BANK_TEMP_VALUE);
@@ -420,7 +422,8 @@ void drawGraphicFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     drawPowerBankRoundBox(display, x + 2, y + 2, 164, 66, 6, POWER_BANK_BLUE, POWER_BANK_BACKGROUND);
     drawPowerBankBattery(display, x, y, haveStatus && status.batteryPercent >= 0, percent);
-    drawPowerBankTemperature(display, x, y, haveDetail && detail.hasBatteryTemperature, detail.batteryTempTenthsC);
+    drawPowerBankTemperature(display, x, y, haveDetail && detail.hasBatteryTemperature, detail.batteryTempTenthsC,
+                             live && detail.overTemperature);
 
     char value[16] = "--";
     if (live) {
