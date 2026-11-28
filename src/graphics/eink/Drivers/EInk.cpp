@@ -63,6 +63,7 @@ int32_t EInk::runOnce()
     // - other error (derived classes)
     if (failed) {
         LOG_WARN("Display update failed. Check wiring & power supply");
+        onUpdateFailed();
         updateRunning = false;
         failed = false;
         return disable();

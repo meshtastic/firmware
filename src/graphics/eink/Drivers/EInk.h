@@ -41,6 +41,7 @@ class EInk : private concurrency::OSThread
     void beginPolling(uint32_t interval, uint32_t expectedDuration); // Begin checking repeatedly if update finished
     virtual bool isUpdateDone() = 0;                                 // Check once if update finished
     virtual void finalizeUpdate() {}                                 // Run any post-update code
+    virtual void onUpdateFailed() {}                                 // Run when an update fails, during or after update()
     bool failed = false;                                             // If an error occurred during update
 
   private:

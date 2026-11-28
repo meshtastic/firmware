@@ -59,12 +59,10 @@ void UC8175::update(uint8_t *imageData, UpdateTypes type)
     writeNewImage();
     sendCommand(0x12); // Display refresh.
 
-    // A failed update dropped its commands, so the panel does not show this frame: an identical next frame must not be skipped
-    if (previousBuffer && !failed) {
+    if (previousBuffer) {
         memcpy(previousBuffer, buffer, bufferSize);
         hasPreviousBuffer = true;
-    } else
-        hasPreviousBuffer = false;
+    }
 
     detachFromUpdate();
 }
@@ -82,6 +80,13 @@ void UC8175::wait(uint32_t timeoutMs)
         }
         yield();
     }
+}
+
+// The panel may not show the cached frame, whether the update failed mid-sequence or timed out later: an identical next
+// frame must not be skipped, nor used as the FAST refresh's old image
+void UC8175::onUpdateFailed()
+{
+    hasPreviousBuffer = false;
 }
 
 void UC8175::reset()

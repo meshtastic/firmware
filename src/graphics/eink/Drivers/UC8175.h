@@ -38,6 +38,7 @@ class UC8175 : public EInk
     virtual void detachFromUpdate();
     virtual bool isUpdateDone() override;
     virtual void finalizeUpdate() override;
+    void onUpdateFailed() override;
 
   protected:
     static constexpr uint8_t BUSY_ACTIVE = LOW;
