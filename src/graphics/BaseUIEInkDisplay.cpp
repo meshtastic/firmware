@@ -87,6 +87,18 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
     if (lastDrawMsec != 0 && (now - lastDrawMsec) < msecLimit)
         return false;
 
+    // An unchanged frame is skipped before decide(), which charges refresh debt for every frame: an idle screen ticking
+    // once a second would otherwise run a FULL every fastPerFull seconds. COSMETIC still redraws; a held FULL still runs.
+    const uint32_t hash = frameHash();
+    const bool heldFull = framePending && pendingType == Drivers::EInk::UpdateTypes::FULL;
+    if (hash == lastHash && lastDrawMsec != 0 && !(frameFlags & COSMETIC) && !heldFull) {
+        // The panel shows, or is drawing, this frame already: any held frame is stale
+        framePending = false;
+        OSThread::disable();
+        frameFlags = BACKGROUND;
+        return false;
+    }
+
     Drivers::EInk::UpdateTypes type = decide();
     // A held FULL frame was already charged against the refresh debt; whatever replaces it must still be FULL
     if (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL)
@@ -123,12 +135,13 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
 
 bool BaseUIEInkDisplay::commit(Drivers::EInk::UpdateTypes type, bool blocking)
 {
-    uint32_t hash = repack();
+    const uint32_t hash = frameHash();
 
     // Skip if frame unchanged. Exception: caller explicitly wants a refresh (COSMETIC or FULL).
     if (hash == lastHash && type != Drivers::EInk::UpdateTypes::FULL && lastDrawMsec != 0)
         return false;
     lastHash = hash;
+    repack();
 
     // Fall back to FULL on panels that don't advertise FAST support.
     if (type == Drivers::EInk::UpdateTypes::FAST && !driver->supports(Drivers::EInk::UpdateTypes::FAST))
@@ -190,12 +203,17 @@ Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
     return UT::FAST;
 }
 
-uint32_t BaseUIEInkDisplay::repack()
+uint8_t BaseUIEInkDisplay::panelRotation() const
+{
+    // flipScreenVertically() is a no-op here (sendCommand() discards commands), so honour flip_screen as a further 180°
+    return (rotation + (config.display.flip_screen ? 2 : 0)) & 0x3;
+}
+
+void BaseUIEInkDisplay::repack()
 {
     const uint16_t pw = driver->width;
     const uint16_t ph = driver->height;
-    // flipScreenVertically() is a no-op here (sendCommand() discards commands), so honour flip_screen as a further 180°
-    const uint8_t rot = (rotation + (config.display.flip_screen ? 2 : 0)) & 0x3;
+    const uint8_t rot = panelRotation();
 
     // Unrotated, byte-aligned: convert 8x8 blocks, one OLED page of 8 columns into 8 panel row bytes
     if (rot == 0 && displayWidth == pw && displayHeight == ph && pw % 8 == 0 && ph % 8 == 0) {
@@ -211,7 +229,7 @@ uint32_t BaseUIEInkDisplay::repack()
                 }
             }
         }
-        return hashPanelBuffer();
+        return;
     }
 
     memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
@@ -255,18 +273,18 @@ uint32_t BaseUIEInkDisplay::repack()
                 panelBuffer[byteNum] |= (1 << bitNum);
         }
     }
-
-    return hashPanelBuffer();
 }
 
-uint32_t BaseUIEInkDisplay::hashPanelBuffer() const
+uint32_t BaseUIEInkDisplay::frameHash() const
 {
     // FNV-1a
     uint32_t h = 2166136261u;
-    for (uint32_t i = 0; i < panelBufferSize; i++) {
-        h ^= panelBuffer[i];
+    for (uint32_t i = 0; i < displayBufferSize; i++) {
+        h ^= buffer[i];
         h *= 16777619u;
     }
+    h ^= panelRotation(); // A flip_screen change redraws an otherwise identical frame
+    h *= 16777619u;
     return h;
 }
 

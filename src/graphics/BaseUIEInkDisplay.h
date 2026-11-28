@@ -63,10 +63,11 @@ class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
     // Perform an update now, unconditionally. Returns true if a frame was pushed to the driver.
     bool commit(Drivers::EInk::UpdateTypes type, bool blocking);
 
-    // Convert OLEDDisplay's column-major buffer into the panel's row-major MSB-left buffer.
-    // Applies rotation. Returns the hash of the panel buffer for frame-skip comparison.
-    uint32_t repack();
-    uint32_t hashPanelBuffer() const;
+    // Convert OLEDDisplay's column-major buffer into the panel's row-major MSB-left buffer, applying rotation.
+    // Only while the driver is idle: it reads panelBuffer again when an update finishes.
+    void repack();
+    uint8_t panelRotation() const; // rotation, plus 180° for flip_screen
+    uint32_t frameHash() const;    // of the OLEDDisplay buffer and panelRotation(), for frame-skip comparison
 
     // Decide FULL vs FAST based on current frame flags + accumulated debt.
     Drivers::EInk::UpdateTypes decide();
