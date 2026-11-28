@@ -24,13 +24,12 @@
 namespace sfppsr
 {
 
-// Which derivation produced the fields: hash, short-ID width, checksum domain, bucket size. A
-// receiver that does not implement the stated version discards the message rather than parsing it
-// under its own rules. Zero is invalid, not a default.
+// Which derivation produced the fields: hash, short-ID width, checksum domain and content-bucket
+// derivation. A receiver that does not implement the stated version discards the message rather
+// than parsing it under its own rules. Zero is invalid, not a default.
 constexpr uint32_t kDerivationVersion = 1;
 
-// The largest sketch an advert may carry: a whole window in one frame. The old per-bucket capacity
-// of 32 still fits inside it.
+// The largest sketch an advert may carry: a whole window in one frame.
 constexpr size_t kMaxSketchCapacity = 48;
 constexpr size_t kMaxSketchBytes = 4 * kMaxSketchCapacity;
 
@@ -65,7 +64,7 @@ bool parseAdvertScope(uint32_t packed, AdvertScope &out);
 uint8_t storeSizeToCode(uint32_t storeSize);
 uint16_t codeToStoreSize(uint8_t code);
 
-// A full bucket and more, inside one frame.
+// One full listing frame.
 constexpr size_t kMaxShortIds = 40;
 
 // The configured short IDs per listing or item-request frame, clamped to the range the YAML knob
@@ -97,7 +96,6 @@ struct ShortIdList {
 };
 
 // Build. Each returns false rather than emitting a message that would be rejected on arrival.
-bool buildAdvert(const Scope &scope, const BucketSummary &summary, meshtastic_StoreForwardPlusPlus &out);
 bool buildWindowAdvert(const Scope &scope, const AdvertScope &storeScope, const BucketSummary &summary,
                        meshtastic_StoreForwardPlusPlus &out);
 bool buildItemRequest(const Scope &scope, const std::vector<pinsketch::Element> &ids, meshtastic_StoreForwardPlusPlus &out);
@@ -106,7 +104,6 @@ bool buildEnumProvide(const Scope &scope, const std::vector<pinsketch::Element> 
                       meshtastic_StoreForwardPlusPlus &out);
 
 // Parse. False means the message must be discarded without an answer.
-bool parseAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out);
 bool parseWindowAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out);
 bool parseShortIds(const meshtastic_StoreForwardPlusPlus &in, ShortIdList &out);
 bool parseScope(const meshtastic_StoreForwardPlusPlus &in, Scope &out);

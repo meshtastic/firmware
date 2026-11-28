@@ -118,7 +118,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // --- Arm C: detector + short-ID enumeration (StoreAndForward.Repair = enum) ---
 
-    void advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len);
     void advertiseWindow(uint8_t *root_hash, size_t root_hash_len);
     void rememberPeerScope(NodeNum peer, const uint8_t *root_hash, const sfppsr::AdvertScope &scope);
     void expireEnumExchange();
@@ -216,7 +215,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // Enumeration (arm C) state. One exchange is in flight at a time; the next advert tick retries.
     sfppframe::Reassembler enumReassembler{16};
-    uint32_t enumBucketCursor = 0;
     // Canonical text writes since the previous advert; the next advert's sketch capacity follows it.
     uint32_t enumWritesSinceAdvert = 0;
 
@@ -301,13 +299,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint8_t hash[SFPP_HASH_SIZE];
     };
     std::vector<EnumPromoted> enumPromoted;
-    uint8_t enumSeenRoot[SFPP_HASH_SIZE] = {0};
-    struct EnumBucketSeen {
-        uint32_t bucket;
-        uint32_t count;
-        uint64_t checksum;
-    };
-    std::vector<EnumBucketSeen> enumAdvertSeen;
 
     // A broadcast listing overheard outside our own exchange stands in for our ENUM_REQUEST.
     struct EnumHeardListing {

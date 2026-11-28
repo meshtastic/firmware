@@ -542,78 +542,6 @@ void StoreForwardPlusPlusModule::suppressEnumBucket(const uint8_t *root_hash, ui
     enumSuppressed.push_back(entry);
 }
 
-void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len)
-{
-    if (memcmp(enumSeenRoot, root_hash, SFPP_HASH_SIZE) != 0) {
-        memcpy(enumSeenRoot, root_hash, SFPP_HASH_SIZE);
-        enumAdvertSeen.clear();
-    }
-    std::vector<uint32_t> buckets;
-    if (!store_.collectBuckets(root_hash, root_hash_len, buckets))
-        return;
-
-    // Newest-changed first: a bucket whose summary differs from the one last advertised (or that
-    // was never advertised) goes ahead of the round-robin.
-    int64_t chosenIndex = -1;
-    for (int64_t i = (int64_t)buckets.size() - 1; i >= 0; i--) {
-        sfppsr::BucketSummary summary(4);
-        if (!store_.buildBucketSummary(root_hash, root_hash_len, buckets[(size_t)i], summary) || summary.count() == 0)
-            continue;
-        bool changed = true;
-        for (const auto &seen : enumAdvertSeen) {
-            if (seen.bucket == buckets[(size_t)i]) {
-                changed = (seen.count != summary.count() || seen.checksum != summary.checksum());
-                break;
-            }
-        }
-        if (changed) {
-            chosenIndex = i;
-            break;
-        }
-    }
-
-    uint32_t bucket = 0;
-    if (chosenIndex >= 0) {
-        bucket = buckets[(size_t)chosenIndex];
-        enumBucketCursor = (uint32_t)(chosenIndex + 1) % (uint32_t)buckets.size();
-    } else {
-        // No change: one bucket per tick, round-robin.
-        if (enumBucketCursor >= buckets.size())
-            enumBucketCursor = 0;
-        bucket = buckets[enumBucketCursor];
-        enumBucketCursor = (enumBucketCursor + 1) % (uint32_t)buckets.size();
-    }
-
-    sfppsr::BucketSummary summary(4);
-    if (!store_.buildBucketSummary(root_hash, root_hash_len, bucket, summary) || summary.count() == 0)
-        return;
-
-    sfppsr::Scope scope;
-    // Every tenth advert carries the full root so a blank follower can join; the rest use the
-    // 4-byte prefix to keep the standing cost down.
-    const bool fullRoot = (enumAdvertTick++ % kEnumFullRootEvery) == (kEnumFullRootEvery - 1);
-    copyScopeRoot(root_hash, root_hash_len, scope, bucket, fullRoot);
-    meshtastic_StoreForwardPlusPlus msg;
-    if (!sfppsr::buildAdvert(scope, summary, msg))
-        return;
-    // The 4-byte tip is the advertised bucket's content count, not a chain counter.
-    msg.encapsulated_rxtime = summary.count();
-    if (!sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size))
-        return;
-
-    bool stored = false;
-    for (auto &seen : enumAdvertSeen) {
-        if (seen.bucket == bucket) {
-            seen.count = summary.count();
-            seen.checksum = summary.checksum();
-            stored = true;
-            break;
-        }
-    }
-    if (!stored)
-        enumAdvertSeen.push_back({bucket, summary.count(), summary.checksum()});
-}
-
 void StoreForwardPlusPlusModule::rememberPeerScope(NodeNum peer, const uint8_t *root_hash, const sfppsr::AdvertScope &scope)
 {
     const uint32_t nowMs = Time::getMillis();
@@ -678,10 +606,8 @@ void StoreForwardPlusPlusModule::advertiseWindow(uint8_t *root_hash, size_t root
 void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
     sfppsr::Advert advert;
-    // The packed scope selects the new shape; sr_version=1 selects the legacy per-bucket advert that
-    // a build from before this change still sends.
-    const bool window = sfppsr::parseWindowAdvert(*t, advert);
-    if (!window && !sfppsr::parseAdvert(*t, advert))
+    // Only the packed-scope advert exists on the wire now; the old per-bucket shape is refused.
+    if (!sfppsr::parseWindowAdvert(*t, advert))
         return;
 
     uint8_t derived[SFPP_HASH_SIZE] = {0};
@@ -716,8 +642,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     }
     enumForeignRootLoggedPeer = 0;
 
-    if (window)
-        rememberPeerScope(mp.from, root, advert.storeScope);
+    rememberPeerScope(mp.from, root, advert.storeScope);
 
     logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
     if (portduino_config.sfpp_enum_listen_only)
@@ -732,74 +657,38 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         }
     }
 
-    if (window) {
-        const uint32_t capacity = advert.sketch.capacity();
-        if (capacity == 0)
-            return;
-
-        // Compare the whole window at the peer's capacity. The margin is zero here; the
-        // elapsed-time edge handling lands with the scope requests.
-        const uint32_t windowS = configuredWindowHours() * 60 * 60;
-        sfppsr::BucketSummary local(capacity);
-        store_.buildWindowSummary(root, SFPP_HASH_SIZE, capacity, windowS, 0, local);
-
-        if (local.count() == advert.count && local.checksum() == advert.checksum)
-            return;
-
-        const uint32_t bucket = sfppsr::kWholeSetBucket;
-        if (enumExchangeActive) {
-            if (bucket != enumExchangeBucket)
-                addPendingBucket(root, mp.from, bucket, advert.count, advert.checksum, 0);
-            return;
-        }
-
-        if (enumBucketSuppressed(root, bucket, advert.count, advert.checksum))
-            return;
-
-        beginEnumExchange(root, bucket, mp.from, advert.count, advert.checksum);
-        enumPeerTip = 0;
-        const uint32_t own = local.count();
-        const uint32_t gap = advert.count > own ? advert.count - own : own - advert.count;
-        // A gap wider than the sketch capacity cannot decode; go straight to the listing.
-        if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH && gap <= capacity &&
-            trySketchExchange(advert, local, root, bucket, mp.from))
-            return;
-        requestEnumList(root, bucket, mp.from);
-        return;
-    }
-
-    const uint32_t advertTip = t->encapsulated_rxtime; // the sender's content-bucket count
-
-    // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
-    // checksum 0, so it mismatches a non-empty peer and pulls too.
-    sfppsr::BucketSummary local(4);
-    store_.buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
-    const bool namedMismatch = !(local.count() == advert.count && local.checksum() == advert.checksum);
-    if (!namedMismatch)
+    const uint32_t capacity = advert.sketch.capacity();
+    if (capacity == 0)
         return;
 
+    // Compare the whole window at the peer's capacity. The margin is zero here; the
+    // elapsed-time edge handling lands with the scope requests.
+    const uint32_t windowS = configuredWindowHours() * 60 * 60;
+    sfppsr::BucketSummary local(capacity);
+    store_.buildWindowSummary(root, SFPP_HASH_SIZE, capacity, windowS, 0, local);
+
+    if (local.count() == advert.count && local.checksum() == advert.checksum)
+        return;
+
+    const uint32_t bucket = sfppsr::kWholeSetBucket;
     if (enumExchangeActive) {
-        // A behind bucket seen while busy is remembered (bounded, newest first) and
-        // pulled when this exchange ends.
-        if (advert.scope.bucket != enumExchangeBucket)
-            addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
+        if (bucket != enumExchangeBucket)
+            addPendingBucket(root, mp.from, bucket, advert.count, advert.checksum, 0);
         return;
     }
 
-    {
-        // A bucket that could not be repaired from this advertised summary is not pulled again until
-        // a peer advertises a different one for it.
-        if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
-            return;
-
-        beginEnumExchange(root, advert.scope.bucket, mp.from, advert.count, advert.checksum);
-        enumPeerTip = advertTip;
-        if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH &&
-            trySketchExchange(advert, local, root, advert.scope.bucket, mp.from))
-            return;
-        requestEnumList(root, advert.scope.bucket, mp.from);
+    if (enumBucketSuppressed(root, bucket, advert.count, advert.checksum))
         return;
-    }
+
+    beginEnumExchange(root, bucket, mp.from, advert.count, advert.checksum);
+    enumPeerTip = 0;
+    const uint32_t own = local.count();
+    const uint32_t gap = advert.count > own ? advert.count - own : own - advert.count;
+    // A gap wider than the sketch capacity cannot decode; go straight to the listing.
+    if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH && gap <= capacity &&
+        trySketchExchange(advert, local, root, bucket, mp.from))
+        return;
+    requestEnumList(root, bucket, mp.from);
 }
 
 bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local,

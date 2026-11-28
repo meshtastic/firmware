@@ -172,22 +172,6 @@ bool hasSetReconciliationFields(const meshtastic_StoreForwardPlusPlus &msg)
            msg.sr_signature.size != 0;
 }
 
-bool buildAdvert(const Scope &scope, const BucketSummary &summary, meshtastic_StoreForwardPlusPlus &out)
-{
-    const size_t sketchBytes = summary.sketch().serializedSize();
-    if (!validScope(scope) || sketchBytes == 0 || sketchBytes > kMaxSketchBytes || sketchBytes > sizeof(out.message.bytes))
-        return false;
-
-    out = meshtastic_StoreForwardPlusPlus_init_default;
-    out.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT;
-    writeScope(scope, out);
-    out.sr_count = summary.count();
-    out.sr_checksum = summary.checksum();
-    summary.sketch().serialize(out.message.bytes);
-    out.message.size = sketchBytes;
-    return true;
-}
-
 bool buildWindowAdvert(const Scope &scope, const AdvertScope &storeScope, const BucketSummary &summary,
                        meshtastic_StoreForwardPlusPlus &out)
 {
@@ -209,7 +193,7 @@ bool buildWindowAdvert(const Scope &scope, const AdvertScope &storeScope, const 
     out.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT;
     out.root_hash.size = scope.rootPrefixLen;
     memcpy(out.root_hash.bytes, scope.rootPrefix, scope.rootPrefixLen);
-    out.encapsulated_rxtime = packed;
+    out.scope = packed;
     out.sr_count = summary.count();
     out.sr_checksum = summary.checksum();
     summary.sketch().serialize(out.message.bytes);
@@ -232,7 +216,9 @@ bool parseWindowAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out)
         return false;
 
     AdvertScope storeScope;
-    if (!parseAdvertScope(in.encapsulated_rxtime, storeScope))
+    if (!parseAdvertScope(in.scope, storeScope))
+        return false;
+    if (storeScope.version != kAdvertSchemaVersion)
         return false;
     if (!readFrame(in, out.frameIndex, out.frameTotal))
         return false;
@@ -296,30 +282,6 @@ bool parseScope(const meshtastic_StoreForwardPlusPlus &in, Scope &out)
     if (in.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_PROVIDE && carriesObjectHashFields(in))
         return false;
     return commonHeaderValid(in, out);
-}
-
-bool parseAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out)
-{
-    if (in.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT)
-        return false;
-    if (!parseScope(in, out.scope))
-        return false;
-    if (in.sr_short_ids_count != 0 || in.sr_signature.size != 0)
-        return false;
-    if (!readFrame(in, out.frameIndex, out.frameTotal))
-        return false;
-
-    // deserialize refuses a length that is not a whole number of elements, which is what a truncated
-    // sketch looks like. Decoding one produces a wrong answer rather than an error, so it is refused
-    // here rather than downstream.
-    if (in.message.size == 0 || in.message.size > kMaxSketchBytes)
-        return false;
-    if (!out.sketch.deserialize(in.message.bytes, in.message.size))
-        return false;
-
-    out.count = in.sr_count;
-    out.checksum = in.sr_checksum;
-    return true;
 }
 
 bool parseShortIds(const meshtastic_StoreForwardPlusPlus &in, ShortIdList &out)

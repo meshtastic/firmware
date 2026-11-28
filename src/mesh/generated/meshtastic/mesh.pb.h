@@ -1195,9 +1195,9 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
     uint32_t encapsulated_to;
     /* Sender of the contained message */
     uint32_t encapsulated_from;
-    /* The receive time of the message in question
- On a whole-window ADVERT this carries the packed advert scope. */
-    uint32_t encapsulated_rxtime;
+    /* The packed advert scope on a whole-window ADVERT: schema version, retention,
+ window fraction and store size. */
+    uint32_t scope;
     /* On the set-reconciliation messages this is the content bucket: the first
  byte of the object hash, or the reserved whole-window value. */
     uint32_t bucket;
@@ -2403,7 +2403,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_encapsulated_id_tag 6
 #define meshtastic_StoreForwardPlusPlus_encapsulated_to_tag 7
 #define meshtastic_StoreForwardPlusPlus_encapsulated_from_tag 8
-#define meshtastic_StoreForwardPlusPlus_encapsulated_rxtime_tag 9
+#define meshtastic_StoreForwardPlusPlus_scope_tag 9
 #define meshtastic_StoreForwardPlusPlus_bucket_tag 10
 #define meshtastic_StoreForwardPlusPlus_sr_version_tag 11
 #define meshtastic_StoreForwardPlusPlus_sr_count_tag 12
@@ -2717,7 +2717,7 @@ X(a, STATIC,   SINGULAR, BYTES,    message,           5) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_id,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_to,   7) \
 X(a, STATIC,   SINGULAR, UINT32,   encapsulated_from,   8) \
-X(a, STATIC,   SINGULAR, UINT32,   encapsulated_rxtime,   9) \
+X(a, STATIC,   SINGULAR, UINT32,   scope,             9) \
 X(a, STATIC,   SINGULAR, UINT32,   bucket,           10) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_version,       11) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_count,         12) \

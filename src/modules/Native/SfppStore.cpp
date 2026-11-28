@@ -62,16 +62,14 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
 SfppStore::~SfppStore()
 {
     sqlite3_stmt *statements[] = {
-        canon_insert_stmt,    scratch_insert_stmt,    identityCanonStmt,         identityScratchStmt,
-        replaceCanonCopyStmt, replaceScratchCopyStmt, checkDupMessageHash,       checkScratch,
-        removeScratch,        updatePayloadStmt,      fromScratchStmt,           fromScratchByHashStmt,
-        getHashFromRootStmt,  addRootToMappingsStmt,  getFullRootHashStmt,       getScratchCountStmt,
-        scratchTimeRowsStmt,  deleteScratchRowidStmt, canonTimeRowsStmt,         deleteCanonRowidStmt,
-        bucketSummaryStmt,    bucketIdsStmt,          distinctBucketsStmt,       windowSummaryStmt,
-        windowIdsStmt,        countCanonObjectsStmt,  windowObjectByShortIdStmt, getObjectByShortIdStmt,
-        deleteCanonStmt,      unindexedObjectsStmt,   setObjectIndexStmt,        legacyHistoryStmt,
-        timeStateReadStmt,    timeStateWriteStmt,     restampChannelStmt,        restampScratchStmt,
-        restampDirectStmt,    updateChannelTimeStmt,  updateScratchTimeStmt,     updateDirectTimeStmt,
+        canon_insert_stmt,         scratch_insert_stmt,    identityCanonStmt,      identityScratchStmt,   replaceCanonCopyStmt,
+        replaceScratchCopyStmt,    checkDupMessageHash,    checkScratch,           removeScratch,         updatePayloadStmt,
+        fromScratchStmt,           fromScratchByHashStmt,  getHashFromRootStmt,    addRootToMappingsStmt, getFullRootHashStmt,
+        getScratchCountStmt,       scratchTimeRowsStmt,    deleteScratchRowidStmt, canonTimeRowsStmt,     deleteCanonRowidStmt,
+        bucketSummaryStmt,         bucketIdsStmt,          windowSummaryStmt,      windowIdsStmt,         countCanonObjectsStmt,
+        windowObjectByShortIdStmt, getObjectByShortIdStmt, deleteCanonStmt,        unindexedObjectsStmt,  setObjectIndexStmt,
+        legacyHistoryStmt,         timeStateReadStmt,      timeStateWriteStmt,     restampChannelStmt,    restampScratchStmt,
+        restampDirectStmt,         updateChannelTimeStmt,  updateScratchTimeStmt,  updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -316,10 +314,6 @@ void SfppStore::openStore(const uint8_t *derivedRoot, bool haveDerived)
     sqlite3_prepare_v2(ppDb, "select short_id from channel_messages \
         where substr(root_hash,1,?)=? and bucket=? and short_id is not null order by short_id;",
                        -1, &bucketIdsStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "select distinct bucket from channel_messages \
-        where substr(root_hash,1,?)=? and short_id is not null order by bucket;",
-                       -1, &distinctBucketsStmt, NULL);
 
     // Whole-window queries span every content bucket. The age is applied after the read because the
     // stamps have several bases and only rowAge() can compare them.
@@ -784,18 +778,6 @@ bool SfppStore::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len,
         out.push_back((pinsketch::Element)sqlite3_column_int64(bucketIdsStmt, 0));
     sqlite3_reset(bucketIdsStmt);
 
-    return !out.empty();
-}
-
-bool SfppStore::collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out)
-{
-    out.clear();
-    sqlite3_reset(distinctBucketsStmt);
-    sqlite3_bind_int(distinctBucketsStmt, 1, root_hash_len);
-    sqlite3_bind_blob(distinctBucketsStmt, 2, root_hash, root_hash_len, NULL);
-    while (sqlite3_step(distinctBucketsStmt) == SQLITE_ROW)
-        out.push_back((uint32_t)sqlite3_column_int64(distinctBucketsStmt, 0));
-    sqlite3_reset(distinctBucketsStmt);
     return !out.empty();
 }
 

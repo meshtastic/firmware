@@ -25,6 +25,15 @@ static Scope aScope(uint32_t bucket = 7)
     return s;
 }
 
+static sfppsr::AdvertScope aStoreScope()
+{
+    sfppsr::AdvertScope s;
+    s.retentionHours = 48;
+    s.windowEighths = 4;
+    s.storeSize = 4;
+    return s;
+}
+
 // Deterministic 16-byte object hashes, so a failure is always reproducible.
 static void nthObject(uint32_t n, uint8_t out[16])
 {
@@ -60,21 +69,6 @@ static std::vector<Element> someIds(size_t n)
 
 // --- Round trips ---
 
-void test_anAdvertCarriesTheWholeSummary()
-{
-    const BucketSummary mine = summaryOf(0, 12);
-    meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(9), mine, msg));
-
-    Advert heard;
-    TEST_ASSERT_TRUE(sfppsr::parseAdvert(msg, heard));
-    TEST_ASSERT_EQUAL_UINT32(9, heard.scope.bucket);
-    TEST_ASSERT_EQUAL_UINT(4, heard.scope.rootPrefixLen);
-    TEST_ASSERT_EQUAL_UINT32(12, heard.count);
-    TEST_ASSERT_TRUE(mine.checksum() == heard.checksum);
-    TEST_ASSERT_EQUAL_UINT(mine.sketch().serializedSize(), heard.sketch.serializedSize());
-}
-
 void test_anAdvertResolvesADifferenceAfterTheRoundTrip()
 {
     // The point of the whole exchange: what the peer sends is enough to name what this node lacks.
@@ -82,10 +76,13 @@ void test_anAdvertResolvesADifferenceAfterTheRoundTrip()
     const BucketSummary mine = summaryOf(0, 13);
 
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), peer, msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), peer, msg));
 
     Advert heard;
-    TEST_ASSERT_TRUE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(msg, heard));
+    TEST_ASSERT_EQUAL_UINT(4, heard.scope.rootPrefixLen);
+    TEST_ASSERT_EQUAL_UINT32(peer.count(), heard.count);
+    TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, heard.scope.bucket);
 
     std::vector<Element> difference;
     TEST_ASSERT_TRUE(mine.difference(heard.sketch, difference));
@@ -140,32 +137,16 @@ void test_anEnumRequestIsScopeAndBucketOnly()
     TEST_ASSERT_EQUAL_UINT32(41, scope.bucket);
 }
 
-// --- Version ---
-
-void test_anUnimplementedVersionIsDiscarded()
-{
-    meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
-
-    Advert heard;
-    msg.sr_version = sfppsr::kDerivationVersion + 1;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
-
-    // Absent is not "version 1" - a derivation nobody stated is one nobody can check.
-    msg.sr_version = 0;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
-}
-
 // --- The overloading guard, both directions ---
 
 void test_aSetReconciliationMessageMayNotCarryAnObjectHash()
 {
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 4), msg));
 
     Advert heard;
     msg.message_hash.size = 16;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 }
 
 void test_anItemProvideMayCarryTheChainsOwnFields()
@@ -203,9 +184,9 @@ void test_theWrongTypeIsNeverParsedAsAnother()
     TEST_ASSERT_TRUE(sfppsr::buildItemRequest(aScope(), someIds(3), msg));
 
     Advert heard;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 4), msg));
     ShortIdList page;
     TEST_ASSERT_FALSE(sfppsr::parseShortIds(msg, page));
 }
@@ -215,31 +196,31 @@ void test_theWrongTypeIsNeverParsedAsAnother()
 void test_aTruncatedSketchIsRefusedRatherThanDecoded()
 {
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 10), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 10), msg));
 
     Advert heard;
     msg.message.size -= 1; // no longer a whole number of elements
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 
     msg.message.size = 0;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 }
 
 void test_aSketchOverTheCapacityBoundIsRefused()
 {
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 10), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 10), msg));
 
     Advert heard;
     msg.message.size = sfppsr::kMaxSketchBytes + 4;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 }
 
 void test_anOversizedSketchIsNeverBuilt()
 {
     // One past the whole-window capacity is 196 bytes, past the frame budget the bound keeps.
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_FALSE(sfppsr::buildAdvert(aScope(), summaryOf(0, 10, sfppsr::kMaxSketchCapacity + 1), msg));
+    TEST_ASSERT_FALSE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 10, sfppsr::kMaxSketchCapacity + 1), msg));
 }
 
 // --- Packed advert scope ---
@@ -329,17 +310,52 @@ void test_store_size_minifloat_steps_to_nine_sixty()
     }
 }
 
+// An advert carrying the old per-bucket shape sets sr_version and puts a content count in field 9.
+void test_legacy_bucket_advert_is_not_parseable()
+{
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    msg.root_hash.size = 4;
+    memset(msg.root_hash.bytes, 0x42, msg.root_hash.size);
+    msg.bucket = 9;
+    msg.sr_count = 16;
+    msg.sr_checksum = 0x1234;
+    msg.message.size = 16; // a capacity-4 sketch of zeros
+    memset(msg.message.bytes, 0, msg.message.size);
+
+    Advert heard;
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
+}
+
+// The scope carries its own schema version; a version this build does not know is not read as v1.
+void test_anUnknownScopeVersionIsRefused()
+{
+    sfppsr::AdvertScope store = someScope();
+    store.version = sfppsr::kAdvertSchemaVersion + 1;
+    const BucketSummary summary = summaryOf(0, 9, 12);
+
+    meshtastic_StoreForwardPlusPlus msg;
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), store, summary, msg));
+
+    Advert heard;
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
+
+    store.version = 0;
+    TEST_ASSERT_FALSE(sfppsr::buildWindowAdvert(aScope(), store, summary, msg));
+}
+
 void test_largest_advert_sketch_fits_one_payload()
 {
     const BucketSummary largest = summaryOf(0, 64, sfppsr::kMaxSketchCapacity);
     TEST_ASSERT_EQUAL_UINT(sfppsr::kMaxSketchBytes, largest.sketch().serializedSize());
 
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), largest, msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), largest, msg));
     TEST_ASSERT_EQUAL_UINT(sfppsr::kMaxSketchBytes, msg.message.size);
 
     Advert heard;
-    TEST_ASSERT_TRUE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(msg, heard));
     TEST_ASSERT_EQUAL_UINT(largest.sketch().serializedSize(), heard.sketch.serializedSize());
 }
 
@@ -351,7 +367,7 @@ void test_advert_scope_round_trips_in_field_nine()
     meshtastic_StoreForwardPlusPlus msg;
     TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), store, summary, msg));
     TEST_ASSERT_EQUAL_UINT(0, msg.sr_version);
-    TEST_ASSERT_EQUAL_UINT32(sfppsr::packAdvertScope(store), msg.encapsulated_rxtime);
+    TEST_ASSERT_EQUAL_UINT32(sfppsr::packAdvertScope(store), msg.scope);
     TEST_ASSERT_EQUAL_UINT32(0, msg.bucket);
 
     Advert heard;
@@ -363,15 +379,6 @@ void test_advert_scope_round_trips_in_field_nine()
     TEST_ASSERT_EQUAL_UINT32(summary.count(), heard.count);
     TEST_ASSERT_TRUE(summary.checksum() == heard.checksum);
     TEST_ASSERT_EQUAL_UINT(summary.sketch().serializedSize(), heard.sketch.serializedSize());
-
-    // The legacy parser reads sr_version=1, so it must refuse the new shape.
-    Advert legacy;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, legacy));
-
-    // And the new parser must refuse the legacy shape.
-    meshtastic_StoreForwardPlusPlus old;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summary, old));
-    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(old, heard));
 }
 
 void test_aZeroShortIdIsRefusedBothWays()
@@ -413,22 +420,22 @@ void test_aScopeTooShortToResolveIsRefused()
     shortScope.rootPrefixLen = sfppsr::kRootPrefixBytes - 1;
 
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_FALSE(sfppsr::buildAdvert(shortScope, summaryOf(0, 4), msg));
+    TEST_ASSERT_FALSE(sfppsr::buildWindowAdvert(shortScope, aStoreScope(), summaryOf(0, 4), msg));
 
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 4), msg));
     msg.root_hash.size = sfppsr::kRootPrefixBytes - 1;
     Advert heard;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 }
 
 void test_fieldsBelongingToAnotherTypeAreRefused()
 {
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), summaryOf(0, 4), msg));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(aScope(), aStoreScope(), summaryOf(0, 4), msg));
     msg.sr_short_ids_count = 1;
     msg.sr_short_ids[0] = 5;
     Advert heard;
-    TEST_ASSERT_FALSE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_FALSE(sfppsr::parseWindowAdvert(msg, heard));
 
     TEST_ASSERT_TRUE(sfppsr::buildItemRequest(aScope(), someIds(2), msg));
     msg.sr_checksum = 99;
@@ -441,14 +448,10 @@ void setup()
     UNITY_BEGIN();
 
     // Round trips
-    RUN_TEST(test_anAdvertCarriesTheWholeSummary);
     RUN_TEST(test_anAdvertResolvesADifferenceAfterTheRoundTrip);
     RUN_TEST(test_anEnumProvideCarriesItsFramePosition);
     RUN_TEST(test_aSingleFrameSpendsNoFrameField);
     RUN_TEST(test_anEnumRequestIsScopeAndBucketOnly);
-
-    // Version
-    RUN_TEST(test_anUnimplementedVersionIsDiscarded);
 
     // Overloading guard
     RUN_TEST(test_aSetReconciliationMessageMayNotCarryAnObjectHash);
@@ -470,10 +473,12 @@ void setup()
     RUN_TEST(test_scope_packs_the_19_bit_layout);
     RUN_TEST(test_scope_version_zero_is_invalid);
     RUN_TEST(test_scope_retention_and_window_ranges);
+    RUN_TEST(test_anUnknownScopeVersionIsRefused);
     RUN_TEST(test_store_size_minifloat_is_exact_to_fifteen);
     RUN_TEST(test_store_size_minifloat_steps_to_nine_sixty);
     RUN_TEST(test_largest_advert_sketch_fits_one_payload);
     RUN_TEST(test_advert_scope_round_trips_in_field_nine);
+    RUN_TEST(test_legacy_bucket_advert_is_not_parseable);
 
     exit(UNITY_END());
 }

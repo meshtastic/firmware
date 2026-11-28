@@ -107,7 +107,6 @@ class SfppStore
 
     bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
-    bool collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out);
 
     bool buildWindowSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t capacity, uint32_t windowS, uint32_t marginS,
                             sfppsr::BucketSummary &out);
@@ -176,7 +175,6 @@ class SfppStore
     sqlite3_stmt *getScratchCountStmt = nullptr;
     sqlite3_stmt *bucketSummaryStmt = nullptr;
     sqlite3_stmt *bucketIdsStmt = nullptr;
-    sqlite3_stmt *distinctBucketsStmt = nullptr;
     sqlite3_stmt *windowSummaryStmt = nullptr;
     sqlite3_stmt *windowIdsStmt = nullptr;
     sqlite3_stmt *countCanonObjectsStmt = nullptr;

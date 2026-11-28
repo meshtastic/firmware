@@ -1965,10 +1965,12 @@ void test_content_summary_matches_for_the_same_holding()
     memcpy(scope.rootPrefix, root.data(), root.size());
     scope.rootPrefixLen = root.size();
     scope.bucket = bucket;
+    sfppsr::AdvertScope storeScope;
+    storeScope.retentionHours = 48;
     meshtastic_StoreForwardPlusPlus advertA = meshtastic_StoreForwardPlusPlus_init_zero;
     meshtastic_StoreForwardPlusPlus advertB = meshtastic_StoreForwardPlusPlus_init_zero;
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(scope, a, advertA));
-    TEST_ASSERT_TRUE(sfppsr::buildAdvert(scope, b, advertB));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(scope, storeScope, a, advertA));
+    TEST_ASSERT_TRUE(sfppsr::buildWindowAdvert(scope, storeScope, b, advertB));
     TEST_ASSERT_EQUAL_UINT32(advertA.message.size, advertB.message.size);
     TEST_ASSERT_EQUAL_MEMORY(advertA.message.bytes, advertB.message.bytes, advertA.message.size);
 
@@ -2028,7 +2030,12 @@ void test_window_summary_spans_content_buckets()
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
 
     std::vector<uint32_t> buckets;
-    TEST_ASSERT_TRUE(testSfpp->testStore().collectBuckets(root.data(), root.size(), buckets));
+    for (PacketId id : ids) {
+        StoredRow row;
+        TEST_ASSERT_TRUE(readStoredRow(id, row));
+        if (std::find(buckets.begin(), buckets.end(), row.bucket) == buckets.end())
+            buckets.push_back(row.bucket);
+    }
     TEST_ASSERT_TRUE(buckets.size() >= 2);
 
     sfppsr::BucketSummary summary(8);
