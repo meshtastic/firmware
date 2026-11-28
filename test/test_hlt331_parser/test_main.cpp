@@ -12,7 +12,8 @@
 //  - a CRC that leaves out the length byte, or uses another polynomial, rejects every real frame and
 //    the board reports no battery at all;
 //  - a frame with a bad CRC or length overwriting the last good status;
-//  - losing sync after line noise, or after a repeated A5, so later good frames are dropped;
+//  - losing sync after line noise, after a repeated A5, or after noise ending in A5 5A, so later good
+//    frames are dropped;
 //  - swapped or shifted fields: C1 and C2 states, the 7-bit charge level, the little-endian voltages,
 //    the 10 mW unit of the wireless power, and the signed temperatures;
 //  - external power read only from the charging bit, so a full bank on a charger reads as unplugged.
@@ -169,6 +170,22 @@ void test_resyncs_after_noise_and_a_repeated_header_byte(void)
     TEST_ASSERT_EQUAL_UINT16(3994, parser.status().batteryMv);
 }
 
+// Noise ending in A5 5A makes the next frame's A5 read as a bad length; that A5 must still start the frame.
+void test_frame_right_after_a_noise_header_decodes(void)
+{
+    uint8_t frame[kFrameLen];
+    buildFrame(kData, frame);
+    uint8_t stream[2 + kFrameLen];
+    stream[0] = 0xA5;
+    stream[1] = 0x5A;
+    memcpy(stream + 2, frame, sizeof(frame));
+
+    HLT331Parser parser;
+    TEST_ASSERT_EQUAL(1, feedAll(parser, stream, sizeof(stream)));
+    TEST_ASSERT_EQUAL_UINT32(1, parser.badLengthFrames());
+    TEST_ASSERT_EQUAL_UINT16(3994, parser.status().batteryMv);
+}
+
 // A rejected frame leaves the parser ready for the very next one.
 void test_frame_after_a_rejected_frame_decodes(void)
 {
@@ -228,6 +245,7 @@ void setup()
     RUN_TEST(test_crc_covers_the_length_byte);
     RUN_TEST(test_wrong_length_is_rejected);
     RUN_TEST(test_resyncs_after_noise_and_a_repeated_header_byte);
+    RUN_TEST(test_frame_right_after_a_noise_header_decodes);
     RUN_TEST(test_frame_after_a_rejected_frame_decodes);
     RUN_TEST(test_back_to_back_frames_each_decode);
     RUN_TEST(test_input_present_follows_ports_charging_the_bank);

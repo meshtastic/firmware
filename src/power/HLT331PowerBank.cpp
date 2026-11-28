@@ -90,7 +90,7 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
     {
         if (!haveFrame)
             return false;
-        hlt331Detail(parser.status(), isFresh(), out);
+        hlt331Detail(parser.status(), isFresh(), asleep, out);
         return true;
     }
 

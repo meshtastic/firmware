@@ -26,8 +26,8 @@ bool hlt331MergeStatus(const HLT331Sources &in, PowerBankStatus &out);
 // feeding the bank. Connected, USB enumerates but the bank cannot power a device on C2.
 bool hlt331WantsC2Vbus(bool fresh, const HLT331Status &s);
 
-// The page's view of a frame; live is false while the HLT331 is asleep or silent.
-void hlt331Detail(const HLT331Status &s, bool live, PowerBankDetail &out);
+// The page's view of a frame; live is false while the HLT331 is asleep (IO2 low) or silent.
+void hlt331Detail(const HLT331Status &s, bool live, bool asleep, PowerBankDetail &out);
 
 const char *hlt331FastChargeName(uint8_t mode);
 const char *hlt331WirelessProtocolName(uint8_t protocol);

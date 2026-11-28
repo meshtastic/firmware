@@ -77,9 +77,12 @@ void variant_shutdown()
     digitalWrite(PIN_USB_VBUS_EN, !PIN_USB_VBUS_EN_ACTIVE);
 
     // Wake from System OFF on the HLT331's next power event. Sense the level IO1 is not at now,
-    // so a line already held high does not wake the board straight back up.
+    // so a line already held high does not wake the board straight back up. A pulse in progress would
+    // end in a falling edge and wake it, so first wait for one to end; pulses seen are under 100 ms.
     detachInterrupt(PIN_HLT331_IO1);
     pinMode(PIN_HLT331_IO1, INPUT_PULLDOWN);
+    for (int i = 0; i < 20 && digitalRead(PIN_HLT331_IO1); i++)
+        delay(10);
     const nrf_gpio_pin_sense_t sense = digitalRead(PIN_HLT331_IO1) ? NRF_GPIO_PIN_SENSE_LOW : NRF_GPIO_PIN_SENSE_HIGH;
     nrf_gpio_cfg_sense_input(PIN_HLT331_IO1, NRF_GPIO_PIN_PULLDOWN, sense);
 }
