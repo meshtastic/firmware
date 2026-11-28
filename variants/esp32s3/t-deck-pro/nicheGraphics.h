@@ -4,8 +4,8 @@
 
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
+#include "graphics/eink/Drivers/GDEQ031T10.h"
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/GDEQ031T10.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 // Applets
