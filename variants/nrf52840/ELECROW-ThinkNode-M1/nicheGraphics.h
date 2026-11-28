@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 
 // InkHUD-specific components
 // ---------------------------
@@ -117,6 +117,22 @@ void setupNicheGraphics()
 
     // Begin handling button events
     buttons->start();
+}
+
+#elif defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+
+#include "graphics/BaseUIEInkDisplay.h"
+#include "graphics/eink/Panels/GDEY0154D67.h"
+
+void setupNicheGraphics() {}
+
+NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI()
+{
+    NicheGraphics::Panels::GDEY0154D67 panel; // SPI1 and the PIN_EINK_* pins from variant.h
+    auto *display = new NicheGraphics::BaseUIEInkDisplay(panel.create(), panel.rotation());
+    // Elecrow's limit, as for InkHUD on this board
+    display->setDisplayResilience(10);
+    return display;
 }
 
 #endif
