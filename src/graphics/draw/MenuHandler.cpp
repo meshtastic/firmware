@@ -38,6 +38,7 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
+#include "modules/NodeInfoModule.h"
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
@@ -1262,9 +1263,25 @@ void menuHandler::messageViewModeMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// A channel can carry an announce only if it is configured and not disabled.
+static bool isSendableChannel(ChannelIndex ch)
+{
+    const meshtastic_Channel &c = channels.getByIndex(ch);
+    return c.has_settings && c.role != meshtastic_Channel_Role_DISABLED;
+}
+
+static int countSendableChannels()
+{
+    int count = 0;
+    for (ChannelIndex ch = 0; ch < channels.getNumChannels(); ++ch)
+        if (isSendableChannel(ch))
+            ++count;
+    return count;
+}
+
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Mute, Backlight, Position, Preset, Freetext, Sleep, enumEnd };
+    enum optionsNumbers { Back, Mute, Backlight, Position, NodeInfoChannel, Preset, Freetext, Sleep, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -1292,6 +1309,10 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "Send Node Info";
     }
     optionsEnumArray[options++] = Position;
+    if (nodeInfoModule && countSendableChannels() > 1) {
+        optionsArray[options] = "Node Info on Ch";
+        optionsEnumArray[options++] = NodeInfoChannel;
+    }
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Home Action";
@@ -1321,11 +1342,57 @@ void menuHandler::homeBaseMenu()
             } else {
                 IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
             }
+        } else if (selected == NodeInfoChannel) {
+            menuHandler::menuQueue = menuHandler::NodeInfoChannelMenu;
+            screen->runNow();
         } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+// Broadcasts our NodeInfo on a channel the user picks, instead of the primary that "Send Node Info" uses.
+void menuHandler::nodeInfoChannelMenu()
+{
+    static constexpr int kBack = -1;
+    static constexpr int kChannelBase = 100; // option id = kChannelBase + channel index
+    static char labels[MAX_NUM_CHANNELS][24];
+    static const char *optionsArray[MAX_NUM_CHANNELS + 1] = {"Back"};
+    static int optionsEnumArray[MAX_NUM_CHANNELS + 1] = {kBack};
+    int options = 1;
+
+    for (ChannelIndex ch = 0; ch < channels.getNumChannels() && ch < MAX_NUM_CHANNELS; ++ch) {
+        if (!isSendableChannel(ch))
+            continue;
+        snprintf(labels[options - 1], sizeof(labels[0]), "#%s", channels.getName(ch));
+        optionsArray[options] = labels[options - 1];
+        optionsEnumArray[options++] = kChannelBase + ch;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Send Node Info";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.InitialSelected = options > 1 ? 1 : 0;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected < kChannelBase)
+            return;
+        const ChannelIndex ch = static_cast<ChannelIndex>(selected - kChannelBase);
+        if (!nodeInfoModule || !isSendableChannel(ch))
+            return;
+        service->refreshLocalMeshNode();
+        // shorterTimeout: a user-initiated send is held off for 60s rather than the 30 min periodic floor.
+        const bool sent = nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, ch, true);
+        static char msg[48];
+        if (sent)
+            snprintf(msg, sizeof(msg), "Node Info Sent\n#%s", channels.getName(ch));
+        else
+            snprintf(msg, sizeof(msg), "Node Info\nNot Sent");
+        IF_SCREEN(screen->showSimpleBanner(msg, 3000));
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -3506,6 +3573,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case LicensedToNormalConfirm:
         licensedToNormalConfirmMenu();
+        break;
+    case NodeInfoChannelMenu:
+        nodeInfoChannelMenu();
         break;
 #if HAS_LORA_FEM
     case LoraFemLnaToggleMenu:

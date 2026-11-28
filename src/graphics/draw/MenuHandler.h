@@ -67,6 +67,7 @@ class menuHandler
         ThemeMenu,
         HamModeConfirm,
         LicensedToNormalConfirm,
+        NodeInfoChannelMenu,
 #if HAS_LORA_FEM
         LoraFemLnaToggleMenu
 #endif
@@ -98,6 +99,7 @@ class menuHandler
     static void replyMenu();
     static void deleteMessagesMenu();
     static void homeBaseMenu();
+    static void nodeInfoChannelMenu();
     static void textMessageBaseMenu();
     static void systemBaseMenu();
     static void favoriteBaseMenu();
