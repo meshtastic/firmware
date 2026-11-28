@@ -1315,6 +1315,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 {
     char err_string[160];
     float check_bw;
+    uint32_t preMigrationSlots = 0;
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1325,6 +1326,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
 
         bool preset_valid = newRegion->supportsPreset(loraConfig.modem_preset);
+        if (preset_valid)
+            preMigrationSlots = newRegion->unrasteredSlotCount(check_bw);
         if (!preset_valid) {
             // A preset locked to a sibling of the swappable EU regions swaps the region instead
             // of clamping the preset, as long as the previous region was itself one of the trio.
@@ -1372,6 +1375,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     } else {
         // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+        if (newRegion->getSlotPlan(check_bw).count > 0)
+            preMigrationSlots = newRegion->unrasteredSlotCount(check_bw);
     }
 
     uint32_t numFreqSlots = newRegion->getSlotPlan(check_bw).count;
@@ -1411,14 +1416,24 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
 
         if (loraConfig.channel_num > numFreqSlots) {
+            const bool causedByMigration = preMigrationSlots > 0 && loraConfig.channel_num <= preMigrationSlots;
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
-
-            if (!clamp)
-                return false;
+            if (causedByMigration) {
+                if (!clamp) {
+                    LOG_INFO("%s, defer to clamp", err_string);
+                    return false;
+                }
+                LOG_INFO("%s", err_string);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                                      meshtastic_LogRecord_Level_INFO);
+            } else {
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
+                if (!clamp)
+                    return false;
+            }
             // The pin is what failed: clear it so the region rule picks the slot, and keeps following the channel name
             loraConfig.channel_num = 0;
             uses_default_frequency_slot = true;

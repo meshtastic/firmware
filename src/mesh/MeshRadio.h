@@ -163,6 +163,18 @@ struct RegionInfo {
         const uint32_t count = countSubBand(freqStart, freqEnd);
         return {width, count, lowerFirst, count, lowerFirst};
     }
+
+    // Slot count before unitChannelMHz raster or bandSplitMHz (0 when neither applies).
+    uint32_t unrasteredSlotCount(float bwKHz) const
+    {
+        if (!profile || bwKHz <= 0.0f || freqEnd <= freqStart)
+            return 0;
+        if (profile->unitChannelMHz <= 0.0f && !(bandSplitMHz > freqStart && bandSplitMHz < freqEnd))
+            return 0;
+        const float width = profile->spacing + (profile->padding * 2.0f) + (bwKHz / 1000.0f);
+        const float span = freqEnd - freqStart;
+        return (width <= 0.0f || span < width) ? 0 : static_cast<uint32_t>(round((span + profile->spacing) / width));
+    }
 };
 
 extern const RegionInfo regions[];
