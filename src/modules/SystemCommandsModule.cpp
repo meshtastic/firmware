@@ -116,14 +116,12 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #endif
         return true;
     // Mesh ping
-    case INPUT_BROKER_SEND_PING:
+    case INPUT_BROKER_SEND_PING: {
         service->refreshLocalMeshNode();
-        if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            IF_SCREEN(screen->showSimpleBanner("Position\nSent", 3000));
-        } else {
-            IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
-        }
+        [[maybe_unused]] const MeshService::PingResult sent = service->trySendPosition(NODENUM_BROADCAST, true);
+        IF_SCREEN(screen->showSimpleBanner(MeshService::pingResultBanner(sent), 3000));
         return true;
+    }
     // Power control
     case INPUT_BROKER_SHUTDOWN:
         shutdownAtMsec = Time::skipZero(Time::getMillis());

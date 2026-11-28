@@ -1337,11 +1337,8 @@ void menuHandler::homeBaseMenu()
             screen->setOn(false);
         } else if (selected == Position) {
             service->refreshLocalMeshNode();
-            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-                IF_SCREEN(screen->showSimpleBanner("Position\nSent", 3000));
-            } else {
-                IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
-            }
+            const MeshService::PingResult sent = service->trySendPosition(NODENUM_BROADCAST, true);
+            IF_SCREEN(screen->showSimpleBanner(MeshService::pingResultBanner(sent), 3000));
         } else if (selected == NodeInfoChannel) {
             menuHandler::menuQueue = menuHandler::NodeInfoChannelMenu;
             screen->runNow();
