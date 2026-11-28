@@ -1,3 +1,4 @@
+// trunk-ignore-all(gitleaks): These are dummy values. Not real secrets.
 /*
  * Shared known-answer vectors for the app clients: the same bytes the archive produces for a message
  * hash, an AES-CTR channel decrypt, an AES-CCM DM decrypt, and a framed replay split.
