@@ -683,6 +683,50 @@ bool readShortIds(const std::string &dir, uint32_t bucket, std::vector<pinsketch
     return ok;
 }
 
+bool readAllShortIds(const std::string &dir, std::vector<pinsketch::Element> &out)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    const bool ok = sqlite3_prepare_v2(db, "select short_id from channel_messages where short_id is not null order by short_id;",
+                                       -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        while (sqlite3_step(stmt) == SQLITE_ROW)
+            out.push_back((pinsketch::Element)sqlite3_column_int64(stmt, 0));
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+// One page of a whole-window listing for the given short IDs, as an archive would send it.
+meshtastic_MeshPacket buildWholeWindowListingPage(const uint8_t root[SFPP_HASH_SIZE], const std::vector<pinsketch::Element> &ids,
+                                                  size_t begin, size_t count, uint8_t frameIndex, uint8_t frameTotal)
+{
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(ids.size(), begin + count);
+    std::vector<pinsketch::Element> slice(ids.begin() + begin, ids.begin() + begin + count);
+
+    sfppsr::Scope scope;
+    scope.rootPrefixLen = 4;
+    memcpy(scope.rootPrefix, root, scope.rootPrefixLen);
+    scope.bucket = sfppsr::kWholeSetBucket;
+
+    meshtastic_StoreForwardPlusPlus msg;
+    TEST_ASSERT_TRUE(sfppsr::buildEnumProvide(scope, slice, frameIndex, frameTotal, msg));
+
+    meshtastic_MeshPacket out = meshtastic_MeshPacket_init_zero;
+    out.from = AUTHORITY_NODE;
+    out.to = NODENUM_BROADCAST;
+    out.channel = 0;
+    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    out.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    out.decoded.payload.size = pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes),
+                                                  &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return out;
+}
+
 uint32_t countRows(const std::string &dir, PacketId id)
 {
     sqlite3 *db = nullptr;
@@ -875,6 +919,21 @@ std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs)
     testRouter->sent.clear();
     authority->runOnce();
     return takeSent();
+}
+
+// Drains the authority's queued item frames into one follower and returns how many arrived.
+uint32_t drainItemFramesToFollower(uint32_t expected)
+{
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 1000 && frames < expected; guard++) {
+        for (const auto &out : drainAuthorityOne(2000)) {
+            if (decodeSfpp(out).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue;
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, out));
+            frames++;
+        }
+    }
+    return frames;
 }
 
 bool loadSfppYaml(const std::string &body)
@@ -2555,7 +2614,7 @@ void test_new_advert_carries_scope_and_no_sr_version()
 
 // A count gap larger than the advert's capacity cannot decode; the receiver goes straight to the
 // whole-window listing instead of asking for a sketch it cannot resolve.
-void test_count_gap_skips_the_sketch_decode()
+void test_whole_window_sketch_over_capacity_falls_back_to_listing()
 {
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(60); // ceil(1.5 x 60) caps at 48
@@ -2573,6 +2632,131 @@ void test_count_gap_skips_the_sketch_decode()
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
     TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, decodeSfpp(sent[0]).bucket);
+}
+
+// The whole-window sketch resolves a difference of one, four, sixteen and forty-eight objects
+// without falling back to a listing.
+void test_whole_window_sketch_resolves_one_four_sixteen_and_forty_eight()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    for (uint32_t missing : {1u, 4u, 16u, 48u}) {
+        ingestAuthority(missing);
+        delete follower;
+        buildFollowerFromCopy();
+        TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, missing));
+
+        const meshtastic_MeshPacket advert = runAuthorityOnce();
+        sfppsr::Advert parsed;
+        TEST_ASSERT_TRUE(sfppsr::parseWindowAdvert(decodeSfpp(advert), parsed));
+        TEST_ASSERT_TRUE(parsed.sketch.capacity() >= missing);
+
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+        std::vector<meshtastic_MeshPacket> requests = takeSent();
+        TEST_ASSERT_EQUAL_UINT32(0, countType(requests, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST));
+
+        uint32_t asked = 0;
+        for (const auto &request : requests) {
+            const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(request);
+            TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, msg.sfpp_message_type);
+            TEST_ASSERT_EQUAL_UINT32(sfppsr::kWholeSetBucket, msg.bucket);
+            asked += msg.sr_short_ids_count;
+            TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, request));
+        }
+        TEST_ASSERT_EQUAL_UINT32(missing, asked);
+        TEST_ASSERT_EQUAL_UINT32(missing, drainItemFramesToFollower(missing));
+        assertConverged();
+    }
+}
+
+// IDs already in flight are not asked for again when a complete listing names them.
+void test_item_in_flight_is_not_requested_twice_across_the_window()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 4));
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL_UINT32(4, decodeSfpp(requests[0]).sr_short_ids_count);
+
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readAllShortIds(dirA, ids));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildWholeWindowListingPage(root, ids, 0, ids.size(), 0, 1)));
+
+    TEST_ASSERT_EQUAL_UINT32(0, countType(takeSent(), meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST));
+}
+
+// A sketch result larger than one request frame is split without repeating an ID, and a complete
+// listing afterwards asks for neither the in-flight IDs nor the ones already held.
+void test_split_or_fallback_skips_requested_and_held_items()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(48);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 44)); // four held, forty-four missing
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(2, requests.size());
+
+    std::vector<pinsketch::Element> asked;
+    for (const auto &request : requests) {
+        const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(request);
+        TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, msg.sfpp_message_type);
+        asked.insert(asked.end(), msg.sr_short_ids, msg.sr_short_ids + msg.sr_short_ids_count);
+        TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, request));
+    }
+    std::sort(asked.begin(), asked.end());
+    asked.erase(std::unique(asked.begin(), asked.end()), asked.end());
+    TEST_ASSERT_EQUAL_UINT32(44, asked.size());
+
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readAllShortIds(dirA, ids));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildWholeWindowListingPage(root, ids, 0, 40, 0, 2)));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildWholeWindowListingPage(root, ids, 40, ids.size() - 40, 1, 2)));
+
+    TEST_ASSERT_EQUAL_UINT32(0, countType(takeSent(), meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST));
+}
+
+// An item frame for someone else, heard on the shared channel, fills the in-flight hole and is not
+// asked for again.
+void test_overheard_item_cancels_the_in_flight_request()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    portduino_config.sfpp_item_transport = SFPP_ITEM_BROADCAST;
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));
+
+    const meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL_UINT32(2, decodeSfpp(requests[0]).sr_short_ids_count);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> frames = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, frames.size());
+    meshtastic_MeshPacket overheard = frames[0];
+    overheard.from = UNKNOWN_NODE;
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, overheard));
+
+    Time::setTestMillis(Time::getMillis() + 31000); // past the item retry interval
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    testRouter->sent.clear();
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> retries = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, retries.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(retries[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(retries[0]).sr_short_ids_count);
 }
 
 // Objects missing from several content buckets converge from one whole-window advert and listing.
@@ -2822,7 +3006,11 @@ void setup()
     RUN_TEST(test_consecutive_adverts_cover_the_whole_window);
     RUN_TEST(test_advert_capacity_follows_writes_and_caps_at_48);
     RUN_TEST(test_new_advert_carries_scope_and_no_sr_version);
-    RUN_TEST(test_count_gap_skips_the_sketch_decode);
+    RUN_TEST(test_whole_window_sketch_over_capacity_falls_back_to_listing);
+    RUN_TEST(test_whole_window_sketch_resolves_one_four_sixteen_and_forty_eight);
+    RUN_TEST(test_item_in_flight_is_not_requested_twice_across_the_window);
+    RUN_TEST(test_split_or_fallback_skips_requested_and_held_items);
+    RUN_TEST(test_overheard_item_cancels_the_in_flight_request);
     RUN_TEST(test_whole_window_listing_converges);
     RUN_TEST(test_whole_window_listing_splits_past_eight_frames);
     RUN_TEST(test_whole_window_pull_past_forty_ids_converges);

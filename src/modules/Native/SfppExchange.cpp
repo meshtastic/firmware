@@ -1041,24 +1041,23 @@ bool StoreForwardPlusPlusModule::takeHeardListing(const uint8_t *root_hash, uint
     return false;
 }
 
-bool StoreForwardPlusPlusModule::itemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+bool StoreForwardPlusPlusModule::itemInFlight(const uint8_t *root_hash, pinsketch::Element id)
 {
     const uint32_t now = Time::getMillis();
     for (const auto &entry : enumInFlight) {
-        if (entry.id == id && entry.bucket == bucket && entry.expiresMs > now &&
-            memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0)
+        if (entry.id == id && entry.expiresMs > now && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0)
             return true;
     }
     return false;
 }
 
-void StoreForwardPlusPlusModule::noteItemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+void StoreForwardPlusPlusModule::noteItemInFlight(const uint8_t *root_hash, pinsketch::Element id)
 {
     const uint32_t now = Time::getMillis();
     enumInFlight.erase(std::remove_if(enumInFlight.begin(), enumInFlight.end(),
                                       [&](const EnumInFlight &entry) { return entry.expiresMs <= now; }),
                        enumInFlight.end());
-    enumInFlight.push_back({id, {}, bucket, now + itemRetryIntervalMs()});
+    enumInFlight.push_back({id, {}, now + itemRetryIntervalMs()});
     memcpy(enumInFlight.back().root, root_hash, SFPP_HASH_SIZE);
     while (enumInFlight.size() > 256)
         enumInFlight.pop_front();
@@ -1087,7 +1086,7 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
             const bool held = wholeWindow
                                   ? !store_.collectWindowObjectsByShortId(root_hash, SFPP_HASH_SIZE, id, windowS, 0).empty()
                                   : store_.bucketHoldsShortId(root_hash, bucket, id);
-            if (itemInFlight(root_hash, bucket, id) || std::find(enumWanted.begin(), enumWanted.end(), id) != enumWanted.end() ||
+            if (itemInFlight(root_hash, id) || std::find(enumWanted.begin(), enumWanted.end(), id) != enumWanted.end() ||
                 std::find(enumLateWanted.begin(), enumLateWanted.end(), id) != enumLateWanted.end() || held)
                 continue;
             fresh.push_back(id);
@@ -1113,7 +1112,7 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
     for (pinsketch::Element id : fresh) {
         if (std::find(enumWanted.begin(), enumWanted.end(), id) == enumWanted.end())
             enumWanted.push_back(id);
-        noteItemInFlight(root_hash, bucket, id);
+        noteItemInFlight(root_hash, id);
     }
     enumWantedRemaining = enumWanted.size();
     enumAwaitingList = false;
@@ -1377,7 +1376,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     }
     if (!flight && !heard)
         return;
-    const uint32_t bucket = heard ? heard->bucket : flight->bucket;
+    const uint32_t bucket = heard ? heard->bucket : sfppsr::kWholeSetBucket;
     if (store_.isInDB(hash, sizeof(hash)))
         return;
     if (!store_.storeRecoveredObject(replay, root, fileBucket(bucket)))
