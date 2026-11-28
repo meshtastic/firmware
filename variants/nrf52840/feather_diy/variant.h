@@ -79,9 +79,9 @@ extern "C" {
 #define LORA_DIO2 (0 + 8)   // P0.08 12  // BUSY for SX1262/SX1268
 #define LORA_DIO3           // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-#define LORA_SCK SCK
-#define LORA_MISO MI
-#define LORA_MOSI MO
+#define LORA_SCK PIN_SPI_SCK
+#define LORA_MISO PIN_SPI_MISO
+#define LORA_MOSI PIN_SPI_MOSI
 #define LORA_CS SS
 
 // enables 3.3V periphery like GPS or IO Module

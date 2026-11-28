@@ -75,6 +75,12 @@ class MotionSensor
             tracker.sample(x, y, z, Time::getMillisMonotonic());
     }
 #endif
+#if HAS_SCREEN_AUTO_ROTATE
+    // Turn the screen's picture to the way the device is held, from an accelerometer sample (any unit). The variant
+    // names the axes: AUTO_ROTATE_UP_AXIS points to the top of the screen in the build's orientation, and
+    // AUTO_ROTATE_LEFT_AXIS to its left edge. Call it a few times a second
+    void followOrientation(float x, float y, float z);
+#endif
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
 

@@ -107,9 +107,9 @@ struct Panel_sdl : public Panel_FrameBufferBase {
     void setFrameRotation(uint_fast16_t frame_rotaion);
     void setBrightness(uint8_t brightness) override {};
 
-    static volatile void gpio_hi(uint32_t pin) { _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)] = 1; }
-    static volatile void gpio_lo(uint32_t pin) { _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)] = 0; }
-    static volatile bool gpio_in(uint32_t pin) { return _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)]; }
+    static void gpio_hi(uint32_t pin) { _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)] = 1; }
+    static void gpio_lo(uint32_t pin) { _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)] = 0; }
+    static bool gpio_in(uint32_t pin) { return _gpio_dummy_values[pin & (EMULATED_GPIO_MAX - 1)]; }
 
     static int setup(void);
     static int loop(void);

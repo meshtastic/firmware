@@ -63,7 +63,7 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
 // Unguarded: serialConfigIsValid() is needed on every platform. The class stays guarded in the header.
@@ -337,9 +337,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz - apply the config.
-        // Fail closed: null instance is treated as incapable.
-        if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
+        // Hardware supports 2.4 GHz - apply the config. Ask the active interface, which is not always a RadioLib
+        // chip (meshtasticd's transparent radio is another node's). Fail closed: no interface is incapable.
+        if (router && router->getRadioIface() && router->getRadioIface()->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
             handleSetConfig(r->set_config, fromOthers);
             break;
@@ -727,7 +727,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-    if (mp.pki_encrypted && myReply) {
+    // A ROUTING reply is never PKC-wrapped, so perhapsEncode fails one marked pki_encrypted and the sender gets no answer
+    if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
     return handled;
@@ -857,8 +858,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 // Shared by double-tap-as-button (device) and wake-on-motion (display). Start on either flag's
 // off->on edge; stop on the on->off edge once neither needs it (disable() clears `enabled` so a
 // later re-enable restarts). Skip the stop if the sensor also drives the compass, else the heading
@@ -871,14 +871,14 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     if (!wasOn && nowOn)
         accelerometerThread->setMotionPolling(true);
-    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading())
+    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE)
         accelerometerThread->setMotionPolling(false);
 #else
     if (!wasOn && nowOn && accelerometerThread->enabled == false) {
         accelerometerThread->enabled = true;
         accelerometerThread->start();
     } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
-               !accelerometerThread->providesHeading()) {
+               !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE) { // the screen follows its turns
         accelerometerThread->disable();
     }
 #endif
@@ -915,8 +915,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
         config.has_device = true;
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
         reconcileAccelerometerThread(config.device.double_tap_as_button_press,
                                      c.payload_variant.device.double_tap_as_button_press, config.display.wake_on_tap_or_motion);
 #endif
@@ -1019,8 +1018,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             config.bluetooth.enabled = false;
         }
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
         reconcileAccelerometerThread(config.display.wake_on_tap_or_motion, c.payload_variant.display.wake_on_tap_or_motion,
                                      config.device.double_tap_as_button_press);
 #endif
@@ -2002,15 +2000,18 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
-    printBytes("Set admin key to ", res->session_passkey.bytes, 8);
+    LOG_TRACE("Set session passkey %02x%02x%02x%02x%02x%02x%02x%02x", session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // if halfway to session_expire, regenerate session_passkey, reset the timeout
     // set the key in the packet
 }
 
 bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
-    printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
-    printBytes("Expected session key: ", session_passkey, 8);
+    [[maybe_unused]] const uint8_t *in = res->session_passkey.bytes;
+    LOG_TRACE("Session passkey in %02x%02x%02x%02x%02x%02x%02x%02x, expected %02x%02x%02x%02x%02x%02x%02x%02x", in[0], in[1],
+              in[2], in[3], in[4], in[5], in[6], in[7], session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
     return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);

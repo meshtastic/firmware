@@ -263,6 +263,9 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// MAX17048 is I2C-only; keep the symbol declared in Power.h defined as a stub
+NullSensor max17048Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
@@ -455,6 +458,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // Override variant or default ADC_MULTIPLIER if we have the override pref
         float operativeAdcMultiplier =
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
+        // The filter below holds a value scaled with the previous multiplier, so a runtime
+        // change would otherwise need ~1 min of convergence to show up. Rescale instead.
+        if (last_adc_multiplier != operativeAdcMultiplier) {
+            if (last_adc_multiplier > 0)
+                last_read_value *= operativeAdcMultiplier / last_adc_multiplier;
+            last_adc_multiplier = operativeAdcMultiplier;
+        }
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
         if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
@@ -597,7 +607,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8) || defined(M5STACK_SOLAR_NODE)
         return powerHAL_isVBUSConnected();
 #elif defined(USB_HOST_PWR_DETECT)
         // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame
@@ -675,6 +685,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
+    float last_adc_multiplier = 0;
 #ifdef ARCH_STM32
     // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
     // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")

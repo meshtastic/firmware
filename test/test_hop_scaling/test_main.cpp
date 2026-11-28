@@ -126,9 +126,6 @@ class HopScalingTestShim : public HopScalingModule
             count++;
         }
     }
-
-    // Size introspection for test_memory_layout
-    static constexpr size_t sizeofSelf() { return sizeof(HopScalingModule); }
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -523,7 +520,7 @@ void test_intermediate_status()
 void test_startup_blank_state()
 {
     TEST_MESSAGE("=== Startup with blank state ===");
-    TEST_MESSAGE("Expectation: fresh instance starts with zeroed rolling averages and a valid hop result.");
+    TEST_MESSAGE("Expectation: fresh instance starts with an empty histogram and keeps HOP_MAX.");
 
 #ifdef FSCom
     FSCom.remove("/prefs/hopScalingState.bin");
@@ -533,10 +530,12 @@ void test_startup_blank_state()
     hopScalingModule = shim.get();
     buildDeepLinearChain();
 
-    int32_t interval = shim->runOnce();
+    shim->runOnce();
 
-    TEST_ASSERT_GREATER_THAN(0, interval);
-    TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= HOP_MAX);
+    // No persisted state and no sampled traffic: nothing may be carried in, and the 22-node chain
+    // never reaches the 40-node floor, so the result stays at HOP_MAX.
+    TEST_ASSERT_EQUAL_UINT8(0, shim->getCompactHistogramEntryCount());
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
 
     TEST_MSG_FMT("Startup blank: hop=%u", shim->getLastRequiredHop());
 
@@ -952,39 +951,6 @@ void test_full_at_denom_max_drops_entry()
     hopScalingModule = nullptr;
 }
 
-void test_scenario_summary_output()
-{
-    TEST_MESSAGE("=== Scenario summary ===");
-    TEST_MESSAGE("Scenario       | Nodes  | Distribution                 | Hop    | Why");
-    TEST_MESSAGE("A: Dense local | 110    | 25/30/15/5/10/15/10 h0-6     | 1-2    | 55 nodes at h1 >> 40");
-    TEST_MESSAGE("B: Spread      | 76     | 5/8/12/15/10/6/10/10 h0-7    | 3-4    | Need h3 to reach 40");
-    TEST_MESSAGE("C: Deep chain  | 22     | 2/3/3/4/3/2/2/3 h0-7         | 7      | Never reaches 40");
-    TEST_MESSAGE("D: Router      | 71     | 3/5/45/8/3/2/2/3 h0-7        | 2-3    | 45-node hop-2 cluster");
-    TEST_MESSAGE("E: Megamesh    | 199    | 30/40/35/30/20/15/14/15 h0-7 | 0-1    | Dense low-hop histogram");
-    TEST_MESSAGE("F: Transition  | 22->72 | Chain -> dense local         | 7-><=3 | Adapts to new neighbors");
-    TEST_MESSAGE("G: Persistence | --     | --                           | --     | Eviction avg survives reboot");
-    TEST_MESSAGE("");
-    TEST_MESSAGE("=== Denominator state machine summary ===");
-    TEST_MESSAGE("Test                              | Pre-condition                  | Expectation");
-    TEST_MESSAGE("H: Rises on overflow              | 103 entries forced, denom=1    | samp/filt→2, holdRolls=13");
-    TEST_MESSAGE(
-        "I: Hold counts down               | filt=4 samp=1 hold=3           | no step for 2 rolls, step on roll 3: filt→2");
-    TEST_MESSAGE("J: Steps down gradually           | filt=8 samp=1 hold=1           | 8→4→2→1 over 3 rolls, stable on 4th");
-    TEST_MESSAGE("K: Full at DENOM_MAX drops entry  | 128 entries, samp=filt=128     | count stays 128, LOG_WARN emitted");
-}
-
-static void test_memory_layout()
-{
-    TEST_MSG_FMT("%-35s  %6s  %s", "Type", "bytes", "Notes");
-    TEST_MSG_FMT("%-35s  %6zu  %s", "Record", sizeof(Record), "nodeHash:16 + hops:3 + seen:13 (32-bit packed)");
-    TEST_MSG_FMT("%-35s  %6zu  %s", "HopScalingModule::PerHopCounts", sizeof(HopScalingModule::PerHopCounts),
-                 "perHop[8](16) + total(2)");
-    TEST_MSG_FMT("%-35s  %6zu  %s", "HopScalingModule (instance)", HopScalingTestShim::sizeofSelf(),
-                 "entries[128](512) + denom state + cached results + OSThread overhead");
-
-    TEST_PASS();
-}
-
 // ---------------------------------------------------------------------------
 // Unity setup / teardown / main
 // ---------------------------------------------------------------------------
@@ -1105,8 +1071,6 @@ void setup()
     RUN_TEST(test_fuzz_nodenum_blitz);
 
     printf("\n=== Summary ===\n");
-    RUN_TEST(test_memory_layout);
-    RUN_TEST(test_scenario_summary_output);
 
     exit(UNITY_END());
 }

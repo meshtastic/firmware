@@ -139,81 +139,8 @@ void test_telemetry_device_metrics_serialization()
     TEST_ASSERT_EQUAL(12345, payload["uptime_seconds"].asInt());
 }
 
-void test_telemetry_environment_metrics_serialization()
-{
-    uint8_t buffer[256];
-    size_t payload_size = encode_telemetry_environment_metrics(buffer, sizeof(buffer));
-
-    Json::Value root = serialize_and_get_payload(meshtastic_PortNum_TELEMETRY_APP, buffer, payload_size);
-    const Json::Value &payload = root["payload"];
-
-    TEST_ASSERT_TRUE(payload.isMember("temperature"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.56f, payload["temperature"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("relative_humidity"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.43f, payload["relative_humidity"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("distance"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.29f, payload["distance"].asFloat());
-}
-
-void test_telemetry_environment_metrics_comprehensive()
-{
-    uint8_t buffer[256];
-    size_t payload_size = encode_telemetry_environment_metrics(buffer, sizeof(buffer));
-
-    Json::Value root = serialize_and_get_payload(meshtastic_PortNum_TELEMETRY_APP, buffer, payload_size);
-    const Json::Value &payload = root["payload"];
-
-    TEST_ASSERT_TRUE(payload.isMember("temperature"));
-    TEST_ASSERT_TRUE(payload.isMember("relative_humidity"));
-    TEST_ASSERT_TRUE(payload.isMember("barometric_pressure"));
-    TEST_ASSERT_TRUE(payload.isMember("gas_resistance"));
-    TEST_ASSERT_TRUE(payload.isMember("voltage"));
-    TEST_ASSERT_TRUE(payload.isMember("current"));
-    TEST_ASSERT_TRUE(payload.isMember("iaq"));
-    TEST_ASSERT_TRUE(payload.isMember("distance"));
-    TEST_ASSERT_TRUE(payload.isMember("lux"));
-    TEST_ASSERT_TRUE(payload.isMember("white_lux"));
-    TEST_ASSERT_TRUE(payload.isMember("wind_direction"));
-    TEST_ASSERT_TRUE(payload.isMember("wind_speed"));
-    TEST_ASSERT_TRUE(payload.isMember("wind_gust"));
-    TEST_ASSERT_TRUE(payload.isMember("wind_lull"));
-    TEST_ASSERT_TRUE(payload.isMember("radiation"));
-}
-
-void test_telemetry_environment_metrics_missing_fields()
-{
-    uint8_t buffer[256];
-    size_t payload_size = encode_telemetry_environment_metrics(buffer, sizeof(buffer));
-
-    Json::Value root = serialize_and_get_payload(meshtastic_PortNum_TELEMETRY_APP, buffer, payload_size);
-    const Json::Value &payload = root["payload"];
-
-    TEST_ASSERT_TRUE(payload.isMember("ir_lux"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.37f, payload["ir_lux"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("uv_lux"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.68f, payload["uv_lux"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("weight"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.56f, payload["weight"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("rainfall_1h"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.57f, payload["rainfall_1h"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("rainfall_24h"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.89f, payload["rainfall_24h"].asFloat());
-
-    TEST_ASSERT_TRUE(payload.isMember("soil_moisture"));
-    TEST_ASSERT_EQUAL(85, payload["soil_moisture"].asInt());
-
-    TEST_ASSERT_TRUE(payload.isMember("soil_temperature"));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.54f, payload["soil_temperature"].asFloat());
-}
-
-// Canary test: if a new env field is added to the protobuf but not to the serializer
-// (or to fill_all_env_metrics), this test will fail.
+// Every EnvironmentMetrics field the serializer emits, with its value. This is a fixed list: a field
+// newly added to the protobuf is not covered until it is added here and to the encode helper.
 void test_telemetry_environment_metrics_complete_coverage()
 {
     uint8_t buffer[256];
