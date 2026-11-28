@@ -5,6 +5,7 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
+#include <math.h>
 
 // Sentinel marking the end of a modem preset array. Declared `const` rather
 // than `constexpr` because the cast from 0xFF to the enum is out-of-range and
@@ -25,6 +26,7 @@ struct RegionProfile {
     const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
     float spacing;                                           // gaps between radio channels
     float padding;                                           // padding at each side of the "operating channel"
+    float unitChannelMHz;                                    // unit-channel raster (MHz); when > 0, overrides padding
     bool audioPermitted;
     bool licensedOnly;        // a region profile for licensed operators only
     int8_t textThrottle;      // throttle for text - future expansion
@@ -45,6 +47,7 @@ extern float getEffectiveDutyCycle();
 extern bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset);
 
 extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_JP;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
@@ -66,6 +69,7 @@ struct RegionInfo {
     int16_t overrideSlot; // per-region override slot for frequency selection
                           // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
     const char *name;     // EU433 etc
+    float bandSplitMHz;   // optional sub-band boundary (MHz); slots never straddle it (0 = unsplit)
 
     // Preset accessors (delegate through profile)
     meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
@@ -92,6 +96,84 @@ struct RegionInfo {
         while (profile->presets[n] != MODEM_PRESET_END)
             n++;
         return n;
+    }
+    struct SlotPlan {
+        float width;            // MHz between consecutive slot centers within a sub-band
+        uint32_t count;         // total number of full slots fitting within [freqStart, freqEnd]
+        float firstCenter;      // MHz center frequency of slot 0 (1-based channel_num == 1)
+        uint32_t lowerCount;    // slots in the lower sub-band (equals count when unsplit)
+        float upperFirstCenter; // MHz center frequency of slot lowerCount when split
+
+        float centerFreq(uint32_t slotIndex) const
+        {
+            if (lowerCount < count && slotIndex >= lowerCount)
+                return upperFirstCenter + (slotIndex - lowerCount) * width;
+            return firstCenter + slotIndex * width;
+        }
+    };
+
+    SlotPlan getSlotPlan(float bwKHz) const
+    {
+        if (!profile || bwKHz <= 0.0f || freqEnd <= freqStart)
+            return {0.0f, 0, 0.0f, 0, 0.0f};
+
+        const float bwMHz = bwKHz / 1000.0f;
+        const float spacing = profile->spacing;
+        float padding = profile->padding;
+        if (profile->unitChannelMHz > 0.0f) {
+            // Bond ceil(bw / unitChannel) contiguous unit channels, centering bw symmetrically.
+            const uint32_t numUnits = static_cast<uint32_t>((bwMHz / profile->unitChannelMHz) * (1.0f - 1e-6f)) + 1;
+            const float slotSpan = numUnits * profile->unitChannelMHz;
+            padding = slotSpan > bwMHz ? (slotSpan - bwMHz) * 0.5f : 0.0f;
+        }
+
+        const float width = spacing + (padding * 2.0f) + bwMHz;
+        const float centerOffset = (bwMHz * 0.5f) + padding;
+        const float lowerFirst = freqStart + centerOffset;
+        if (width <= 0.0f)
+            return {width, 0, lowerFirst, 0, lowerFirst};
+
+        auto countSubBand = [&](float subStart, float subEnd) -> uint32_t {
+            const float span = subEnd - subStart;
+            if ((span + spacing) <= 0.0f)
+                return 0;
+            // Absorb ~1 ULP of float32 endpoint cancellation (e.g. 922.3f - 920.5f) without inflating narrow slots.
+            const float endpointEps = subEnd * 1.5e-7f;
+            const float maxEps = width * 0.25f;
+            const float tol = endpointEps < maxEps ? endpointEps : maxEps;
+            return static_cast<uint32_t>((((span + spacing) + tol) / width) * (1.0f + 1e-6f));
+        };
+
+        if (bandSplitMHz > freqStart && bandSplitMHz < freqEnd) {
+            const uint32_t lowerCount = countSubBand(freqStart, bandSplitMHz);
+            const uint32_t upperCount = countSubBand(bandSplitMHz, freqEnd);
+            const uint32_t total = lowerCount + upperCount;
+            const float upperFirst = bandSplitMHz + centerOffset;
+            const float firstCenter = (lowerCount > 0 || upperCount == 0) ? lowerFirst : upperFirst;
+            return {width, total, firstCenter, lowerCount, upperFirst};
+        }
+
+        // Off the unit-channel raster keep round(), as before: flooring would move the hashed slot in other regions.
+        if (profile->unitChannelMHz <= 0.0f) {
+            const float span = freqEnd - freqStart;
+            const uint32_t count = span < width ? 0 : static_cast<uint32_t>(round((span + spacing) / width));
+            return {width, count, lowerFirst, count, lowerFirst};
+        }
+
+        const uint32_t count = countSubBand(freqStart, freqEnd);
+        return {width, count, lowerFirst, count, lowerFirst};
+    }
+
+    // Slot count before unitChannelMHz raster or bandSplitMHz (0 when neither applies).
+    uint32_t unrasteredSlotCount(float bwKHz) const
+    {
+        if (!profile || bwKHz <= 0.0f || freqEnd <= freqStart)
+            return 0;
+        if (profile->unitChannelMHz <= 0.0f && !(bandSplitMHz > freqStart && bandSplitMHz < freqEnd))
+            return 0;
+        const float width = profile->spacing + (profile->padding * 2.0f) + (bwKHz / 1000.0f);
+        const float span = freqEnd - freqStart;
+        return (width <= 0.0f || span < width) ? 0 : static_cast<uint32_t>(round((span + profile->spacing) / width));
     }
 };
 
