@@ -72,6 +72,10 @@ void variant_shutdown()
     nrf_gpio_cfg_default(PIN_SERIAL2_RX);
     nrf_gpio_cfg_default(PIN_SERIAL2_TX);
 
+    // Released, so the bank can power a device on C2 while the node is off. Q3's base has no pull-down, so
+    // the pin stays an output, driven low.
+    digitalWrite(PIN_USB_VBUS_EN, !PIN_USB_VBUS_EN_ACTIVE);
+
     // Wake from System OFF on the HLT331's next power event. Sense the level IO1 is not at now,
     // so a line already held high does not wake the board straight back up.
     detachInterrupt(PIN_HLT331_IO1);

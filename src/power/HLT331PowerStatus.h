@@ -22,6 +22,10 @@ constexpr uint16_t HLT331_GAUGE_MAX_DISAGREEMENT_MV = 200;
 // Charging and external power only from a fresh frame. False if no battery source is usable.
 bool hlt331MergeStatus(const HLT331Sources &in, PowerBankStatus &out);
 
+// Whether C2's VBUS should reach the board (IO_CSA on the Mesh Pocket V2): only while a fresh frame shows C2
+// feeding the bank. Connected, USB enumerates but the bank cannot power a device on C2.
+bool hlt331WantsC2Vbus(bool fresh, const HLT331Status &s);
+
 // The page's view of a frame; live is false while the HLT331 is asleep or silent.
 void hlt331Detail(const HLT331Status &s, bool live, PowerBankDetail &out);
 

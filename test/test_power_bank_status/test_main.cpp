@@ -2,6 +2,8 @@
 //  - CW2217::decode() in src/power/CW2217.cpp, the fuel gauge's registers 0x00-0x0F;
 //  - hlt331MergeStatus() and hlt331Detail() in src/power/HLT331PowerStatus.cpp, which choose between
 //    the gauge and the HLT331 power-bank controller;
+//  - hlt331WantsC2Vbus() in the same file, which decides IO_CSA: C2's VBUS reaching the board lets USB
+//    enumerate but stops the bank powering a device on C2;
 //  - graphics::PowerBankPage::formatLines() in src/graphics/draw/PowerBankPage.cpp, the page text.
 //
 // The HLT331 stops sending about 30 s after nothing is plugged in and holds IO2 low; on the first
@@ -18,6 +20,9 @@
 //  - the gauge used when it disagrees with a live HLT331 reading, or when it is not running;
 //  - a wrong voltage scale, register order or temperature offset in the gauge decode, or a charge level
 //    truncated so that a full pack reads 99 %;
+//  - a full pack shown as 99 % because the gauge stops at 99.4 % at the end of a charge;
+//  - USB cut while a computer charges the bank on C2, or C2 kept connected to the board (so a phone on
+//    C2 gets no power) when C2 is supplying a device, is idle, or the frame is stale;
 //  - C1/C2 states or protocol names swapped on the page, the fast-charge protocol shown away from the port
 //    using it, or a sleeping controller's stale port states shown as live.
 #include "Arduino.h" // declares setup()/loop() with the linkage the framework's main() calls
@@ -228,6 +233,69 @@ void test_no_gauge_and_no_frame_reports_nothing(void)
     TEST_ASSERT_FALSE(hlt331MergeStatus(in, out));
 }
 
+// On hardware at the end of a charge the gauge read 99.37 % (SOC registers 63 5f) for minutes while the
+// HLT331 reported 100 %, so the node showed 99 % on a full pack.
+void test_gauge_at_99_reads_100_when_the_controller_says_full(void)
+{
+    HLT331Sources in;
+    in.gaugeValid = true;
+    in.gaugeMv = 4410;
+    in.gaugePercent = 99;
+    in.haveFrame = in.fresh = true;
+    in.controller = controllerFrame(4390, 100, true, 0, HLT331Status::PORT_CHARGING);
+    PowerBankStatus out;
+    TEST_ASSERT_TRUE(hlt331MergeStatus(in, out));
+    TEST_ASSERT_EQUAL_UINT16(4410, out.batteryMv);
+    TEST_ASSERT_EQUAL_INT8(100, out.batteryPercent);
+
+    // Unplugged and asleep, the controller's last word still counts.
+    in.fresh = false;
+    in.asleep = true;
+    TEST_ASSERT_TRUE(hlt331MergeStatus(in, out));
+    TEST_ASSERT_EQUAL_INT8(100, out.batteryPercent);
+}
+
+void test_gauge_below_99_or_controller_below_100_is_not_rounded_up(void)
+{
+    HLT331Sources in;
+    in.gaugeValid = true;
+    in.gaugeMv = 4400;
+    in.gaugePercent = 98;
+    in.haveFrame = in.fresh = true;
+    in.controller = controllerFrame(4390, 100, true, 0, HLT331Status::PORT_CHARGING);
+    PowerBankStatus out;
+    TEST_ASSERT_TRUE(hlt331MergeStatus(in, out));
+    TEST_ASSERT_EQUAL_INT8(98, out.batteryPercent);
+
+    in.gaugePercent = 99;
+    in.controller.batteryPercent = 99;
+    TEST_ASSERT_TRUE(hlt331MergeStatus(in, out));
+    TEST_ASSERT_EQUAL_INT8(99, out.batteryPercent);
+
+    // Awake but silent: the last frame says nothing about now.
+    in.controller.batteryPercent = 100;
+    in.fresh = false;
+    in.asleep = false;
+    TEST_ASSERT_TRUE(hlt331MergeStatus(in, out));
+    TEST_ASSERT_EQUAL_INT8(99, out.batteryPercent);
+}
+
+// --- hlt331WantsC2Vbus ---
+
+// C2's VBUS on the board is what lets USB enumerate, and what stops the bank powering a device on C2.
+void test_c2_vbus_wanted_only_while_a_fresh_frame_shows_c2_feeding_the_bank(void)
+{
+    const HLT331Status computer = controllerFrame(4000, 50, true, 0, HLT331Status::PORT_CHARGING);
+    const HLT331Status phone = controllerFrame(4000, 50, false, 0, HLT331Status::PORT_DISCHARGING);
+    const HLT331Status empty = controllerFrame(4000, 50, false, 0, HLT331Status::PORT_NOT_CONNECTED);
+    const HLT331Status chargerOnC1 = controllerFrame(4000, 50, true, HLT331Status::PORT_CHARGING, 0);
+    TEST_ASSERT_TRUE(hlt331WantsC2Vbus(true, computer));
+    TEST_ASSERT_FALSE(hlt331WantsC2Vbus(true, phone));
+    TEST_ASSERT_FALSE(hlt331WantsC2Vbus(true, empty));
+    TEST_ASSERT_FALSE(hlt331WantsC2Vbus(true, chargerOnC1));
+    TEST_ASSERT_FALSE(hlt331WantsC2Vbus(false, computer));
+}
+
 // --- hlt331Detail ---
 
 void test_detail_maps_ports_protocols_and_temperatures(void)
@@ -369,6 +437,9 @@ void setup()
     RUN_TEST(test_silent_awake_controller_without_a_gauge_reports_nothing);
     RUN_TEST(test_silent_awake_controller_with_a_gauge_reports_no_charging);
     RUN_TEST(test_no_gauge_and_no_frame_reports_nothing);
+    RUN_TEST(test_gauge_at_99_reads_100_when_the_controller_says_full);
+    RUN_TEST(test_gauge_below_99_or_controller_below_100_is_not_rounded_up);
+    RUN_TEST(test_c2_vbus_wanted_only_while_a_fresh_frame_shows_c2_feeding_the_bank);
     RUN_TEST(test_detail_maps_ports_protocols_and_temperatures);
     RUN_TEST(test_protocol_names_have_no_entry_for_none_or_out_of_range);
     RUN_TEST(test_page_shows_live_ports_wireless_bus_and_temperatures);

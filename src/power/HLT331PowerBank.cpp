@@ -44,6 +44,12 @@ constexpr uint32_t POLL_INTERVAL_MS = 100;
 constexpr uint32_t STALE_MS = 3000;
 constexpr uint32_t WARN_INTERVAL_MS = 60 * 1000;
 constexpr uint32_t GAUGE_INTERVAL_MS = 3000;
+#ifdef PIN_USB_VBUS_EN
+// initVariant() connects C2's VBUS so a computer on C2 gets the boot log; frames start about 6 s in.
+constexpr uint32_t BOOT_VBUS_HOLD_MS = 15 * 1000;
+// C2 has to stop feeding the bank for this long before USB is cut, so a brief change does not drop it.
+constexpr uint32_t VBUS_RELEASE_MS = 3000;
+#endif
 
 #if HLT331_DEBUG
 constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
@@ -65,6 +71,9 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         // Read now so Power's first reading at boot already has the battery.
         readGauge();
         asleep = digitalRead(PIN_HLT331_IO2) == LOW;
+#ifdef PIN_USB_VBUS_EN
+        vbusHoldUntilMs = Time::timerEndsAtMillis(BOOT_VBUS_HOLD_MS);
+#endif
 #if HLT331_DEBUG
         attachInterrupt(digitalPinToInterrupt(PIN_HLT331_IO1), io1Isr, RISING);
         lastIo2 = !asleep;
@@ -115,6 +124,9 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
             }
         }
         asleep = digitalRead(PIN_HLT331_IO2) == LOW;
+#ifdef PIN_USB_VBUS_EN
+        updateBoardVbus();
+#endif
 
         const uint32_t rejected = parser.badCrcFrames() + parser.badLengthFrames();
         if (rejected != lastRejected && (lastWarnMs == 0 || Throttle::hasElapsed(lastWarnMs, WARN_INTERVAL_MS))) {
@@ -142,6 +154,36 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
 #endif
         return POLL_INTERVAL_MS;
     }
+
+#ifdef PIN_USB_VBUS_EN
+    // Connected immediately when C2 starts feeding the bank; released once the boot hold is over and C2 has
+    // stopped for VBUS_RELEASE_MS, so the bank can power a device plugged into C2.
+    void updateBoardVbus()
+    {
+        if (hlt331WantsC2Vbus(isFresh(), parser.status())) {
+            vbusUnwantedSinceMs = 0;
+            setBoardVbus(true);
+            return;
+        }
+        if (vbusUnwantedSinceMs == 0)
+            vbusUnwantedSinceMs = Time::stampMillis();
+        if (Throttle::deadlinePassed(vbusHoldUntilMs) && Throttle::hasElapsed(vbusUnwantedSinceMs, VBUS_RELEASE_MS))
+            setBoardVbus(false);
+    }
+
+    void setBoardVbus(bool connect)
+    {
+        if (connect == boardVbus)
+            return;
+        boardVbus = connect;
+        digitalWrite(PIN_USB_VBUS_EN, connect ? PIN_USB_VBUS_EN_ACTIVE : !PIN_USB_VBUS_EN_ACTIVE);
+        LOG_INFO("HLT331: C2 VBUS %s", connect ? "connected to the board, USB on" : "released for C2 output, USB off");
+    }
+
+    bool boardVbus = true; // initVariant() connects it
+    uint32_t vbusHoldUntilMs = 0;
+    uint32_t vbusUnwantedSinceMs = 0;
+#endif
 
     void readGauge()
     {
