@@ -76,4 +76,27 @@ void setupNicheGraphics()
     buttons->start();
 }
 
+#elif defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+
+#include "graphics/BaseUIEInkDisplay.h"
+#include "graphics/eink/Panels/GDEQ031T10.h"
+
+class TDeckProPanel : public NicheGraphics::Panels::GDEQ031T10
+{
+  protected:
+    // The panel shares the default SPI bus (and spiLock) with the radio and SD card, already started by setup()
+    SPIClass *beginSpi() override { return &SPI; }
+};
+
+void setupNicheGraphics() {}
+
+NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI()
+{
+    auto *panel = new TDeckProPanel();
+    auto *display = new NicheGraphics::BaseUIEInkDisplay(panel->create(), panel->rotation());
+    // Typing pushes a frame per keystroke: allow more FAST refreshes between FULLs than the default
+    display->setDisplayResilience(15);
+    return display;
+}
+
 #endif

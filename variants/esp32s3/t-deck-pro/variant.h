@@ -13,8 +13,6 @@ void tDeckProToggleBacklights();
 #define PIN_EINK_DC 35
 // V1.1 wires the panel reset to GPIO16; on V1.0 that pin is the light sensor's interrupt
 #define PIN_EINK_RES (tDeckProIsV11() ? 16 : -1)
-// V1.1 keeps its panel out of hibernate, which needs that reset to wake
-#define EINK_SKIP_HIBERNATE tDeckProIsV11()
 #define PIN_EINK_SCLK 36
 #define PIN_EINK_MOSI 33
 
