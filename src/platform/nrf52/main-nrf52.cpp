@@ -462,6 +462,9 @@ void nrf52Loop()
     checkSDEvents();
     reportLittleFSCorruptionOnce();
 
+    if (nrf52Bluetooth)
+        nrf52Bluetooth->loop();
+
     variant_nrf52LoopHook(); // Optional variant hook called each nrf52Loop();
 }
 
