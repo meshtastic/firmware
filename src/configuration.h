@@ -306,6 +306,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
 #define CW2015_ADDR 0x62
+#define CW2217_ADDR 0x64
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53

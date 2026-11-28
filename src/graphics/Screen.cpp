@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "Screen.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "PowerMon.h"
 #include "ScreenMirror.h"
 #include "Throttle.h"
@@ -50,6 +51,7 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
+#include "draw/PowerBankPage.h"
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
@@ -1014,6 +1016,10 @@ void Screen::setup()
 #endif
     if (inputBroker)
         inputObserver.observe(inputBroker);
+#if HAS_POWERBANK
+    if (powerBank && powerBank->hasDetail())
+        powerBankObserver.observe(&powerBank->attentionRequested);
+#endif
 
     // Load persisted messages into RAM
     messageStore.loadFromFlash();
@@ -1556,6 +1562,18 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_system);
         PUSH_FRAME_TITLE("System");
     }
+#if HAS_POWERBANK
+    if (powerBank && powerBank->hasDetail()) {
+        fsi.positions.powerBank = numframes;
+#if USE_POWER_BANK_GRAPHIC_PAGE
+        normalFrames[numframes++] = graphics::PowerBankPage::drawGraphicFrame;
+#else
+        normalFrames[numframes++] = graphics::PowerBankPage::drawFrame;
+#endif
+        indicatorIcons.push_back(icon_power_bank);
+        PUSH_FRAME_TITLE("Power");
+    }
+#endif
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
@@ -2056,6 +2074,8 @@ void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
         name = "nodelist_bearings";
     else if (targetIdx == p.system)
         name = "system";
+    else if (targetIdx == p.powerBank)
+        name = "powerBank";
     else if (targetIdx == p.gps)
         name = "gps";
     else if (targetIdx == p.lora)
@@ -2492,6 +2512,24 @@ bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
 }
+
+#if HAS_POWERBANK
+int Screen::handlePowerBankAttention(const PowerBank *)
+{
+    // Leave a menu, a banner or a module that holds the buttons alone; the press is ignored, not queued.
+    if (!ui || !showingNormalScreen || isInteractionBusy() || NotificationRenderer::isOverlayBannerShowing() ||
+        menuHandler::menuQueue != menuHandler::MenuNone || framesetInfo.positions.powerBank == 255)
+        return 0;
+    powerFSM.trigger(EVENT_INPUT); // turns the screen on, or restarts its timeout so the page stays up
+    ui->switchToFrame(framesetInfo.positions.powerBank);
+#ifdef USERPREFS_UI_TEST_LOG
+    logFrameChange("powerbank", framesetInfo.positions.powerBank);
+#endif
+    lastScreenTransition = millis();
+    setFastFramerate();
+    return 0;
+}
+#endif
 
 void Screen::showHomeFrame()
 {
